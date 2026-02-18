@@ -49,6 +49,7 @@ import {
   updateRegistrationField,
   updateTenantSettings,
   updateMyMemberProfile,
+  updateResource,
   leaveGroup
 } from '../controllers/tenantFeatures.controller.js';
 

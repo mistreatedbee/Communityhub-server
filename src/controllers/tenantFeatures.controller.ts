@@ -200,6 +200,16 @@ export async function listResources(req: any, res: any) {
   return ok(res, rows);
 }
 
+export async function getResource(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const resource = await TenantResourceModel.findOne({
+    _id: req.params.resourceId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!resource) throw new AppError('Resource not found', 404, 'NOT_FOUND');
+  return ok(res, resource);
+}
+
 export async function createResource(req: any, res: any) {
   const created = await TenantResourceModel.create({
     tenantId: req.params.tenantId,
@@ -260,6 +270,17 @@ export async function getGroup(req: any, res: any) {
   const programIds = assignments.map((a: any) => a.programId);
   const programs = await ProgramModel.find({ _id: { $in: programIds } }).lean();
   return ok(res, { group, assignments, programs });
+}
+
+export async function listGroupPrograms(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const assignments = await ProgramAssignmentModel.find({
+    tenantId: req.params.tenantId,
+    groupId: req.params.groupId
+  }).lean();
+  const programIds = assignments.map((a: any) => a.programId);
+  const programs = await ProgramModel.find({ _id: { $in: programIds } }).lean();
+  return ok(res, programs);
 }
 
 export async function listGroupMembers(req: any, res: any) {
