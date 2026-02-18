@@ -6,6 +6,8 @@ import { UserModel } from '../models/User.js';
 import { LicenseModel } from '../models/License.js';
 import { MemberProfileModel } from '../models/MemberProfile.js';
 import {
+  AnnouncementModel,
+  EventModel,
   InvitationModel,
   RegistrationFieldModel,
   TenantSettingsModel
@@ -62,6 +64,41 @@ export async function getTenantPublic(req: any, res: any) {
   const tenant = await TenantModel.findOne({ slug: String(req.params.slug).toLowerCase() }).lean();
   if (!tenant) throw new AppError('Tenant not found', 404, 'NOT_FOUND');
   return ok(res, tenant);
+}
+
+export async function getTenantPublicPreview(req: any, res: any) {
+  const tenant = await TenantModel.findOne({ slug: String(req.params.slug).toLowerCase() }).lean();
+  if (!tenant) throw new AppError('Tenant not found', 404, 'NOT_FOUND');
+  const tenantId = tenant._id;
+  const [upcomingEvents, recentAnnouncements] = await Promise.all([
+    EventModel.find({ tenantId, startsAt: { $gte: new Date() } }).sort({ startsAt: 1 }).limit(5).lean(),
+    AnnouncementModel.find({ tenantId }).sort({ createdAt: -1 }).limit(3).lean()
+  ]);
+  return ok(res, {
+    tenant: {
+      id: String(tenant._id),
+      name: tenant.name,
+      slug: tenant.slug,
+      description: tenant.description,
+      logoUrl: tenant.logoUrl,
+      category: tenant.category,
+      location: tenant.location
+    },
+    upcomingEvents: upcomingEvents.map((e: any) => ({
+      _id: String(e._id),
+      title: e.title,
+      startsAt: e.startsAt,
+      location: e.location,
+      isOnline: e.isOnline,
+      meetingLink: e.meetingLink
+    })),
+    recentAnnouncements: recentAnnouncements.map((a: any) => ({
+      _id: String(a._id),
+      title: a.title,
+      content: (a.content || '').slice(0, 200),
+      isPinned: a.isPinned
+    }))
+  });
 }
 
 export async function getTenantById(req: any, res: any) {

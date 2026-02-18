@@ -106,7 +106,8 @@ export async function createAnnouncement(req: any, res: any) {
     content: req.body.content,
     isPinned: !!req.body.isPinned,
     visibility: req.body.visibility || 'MEMBERS',
-    authorUserId: tenantObjectId(req.user.sub)
+    authorUserId: tenantObjectId(req.user.sub),
+    attachmentUrls: Array.isArray(req.body.attachmentUrls) ? req.body.attachmentUrls : []
   });
   await writeAuditLog({
     actorUserId: req.user.sub,
@@ -115,6 +116,31 @@ export async function createAnnouncement(req: any, res: any) {
     metadata: { announcementId: String(created._id) }
   });
   return ok(res, created, 201);
+}
+
+export async function updateAnnouncement(req: any, res: any) {
+  const { tenantId, id } = req.params;
+  const updated = await AnnouncementModel.findOneAndUpdate(
+    { _id: id, tenantId },
+    {
+      $set: {
+        title: req.body.title,
+        content: req.body.content,
+        isPinned: !!req.body.isPinned,
+        visibility: req.body.visibility || 'MEMBERS',
+        ...(Array.isArray(req.body.attachmentUrls) && { attachmentUrls: req.body.attachmentUrls })
+      }
+    },
+    { new: true, runValidators: true }
+  ).lean();
+  if (!updated) return res.status(404).json({ error: { message: 'Announcement not found' } });
+  await writeAuditLog({
+    actorUserId: req.user.sub,
+    tenantId,
+    action: 'ANNOUNCEMENT_UPDATE',
+    metadata: { announcementId: id }
+  });
+  return ok(res, updated);
 }
 
 export async function deleteAnnouncement(req: any, res: any) {
@@ -138,9 +164,29 @@ export async function createPost(req: any, res: any) {
     visibility: req.body.visibility || 'MEMBERS',
     isPublished: req.body.isPublished ?? true,
     publishedAt: req.body.publishedAt ? new Date(req.body.publishedAt) : new Date(),
-    authorUserId: tenantObjectId(req.user.sub)
+    authorUserId: tenantObjectId(req.user.sub),
+    mediaUrls: Array.isArray(req.body.mediaUrls) ? req.body.mediaUrls : []
   });
   return ok(res, created, 201);
+}
+
+export async function updatePost(req: any, res: any) {
+  const { tenantId, id } = req.params;
+  const updated = await TenantPostModel.findOneAndUpdate(
+    { _id: id, tenantId },
+    {
+      $set: {
+        title: req.body.title,
+        content: req.body.content,
+        visibility: req.body.visibility || 'MEMBERS',
+        isPublished: req.body.isPublished ?? true,
+        ...(Array.isArray(req.body.mediaUrls) && { mediaUrls: req.body.mediaUrls })
+      }
+    },
+    { new: true, runValidators: true }
+  ).lean();
+  if (!updated) return res.status(404).json({ error: { message: 'Post not found' } });
+  return ok(res, updated);
 }
 
 export async function deletePost(req: any, res: any) {
@@ -160,12 +206,33 @@ export async function createResource(req: any, res: any) {
     title: req.body.title,
     description: req.body.description || '',
     url: req.body.url || '',
+    thumbnailUrl: req.body.thumbnailUrl || '',
     type: req.body.type || 'link',
     folder: req.body.folder || '',
     groupId: req.body.groupId || null,
+    moduleId: req.body.moduleId || null,
+    programId: req.body.programId || null,
     createdBy: tenantObjectId(req.user.sub)
   });
   return ok(res, created, 201);
+}
+
+export async function updateResource(req: any, res: any) {
+  const updated = await TenantResourceModel.findOneAndUpdate(
+    { _id: req.params.resourceId, tenantId: req.params.tenantId },
+    {
+      ...(req.body.title !== undefined && { title: req.body.title }),
+      ...(req.body.description !== undefined && { description: req.body.description }),
+      ...(req.body.url !== undefined && { url: req.body.url }),
+      ...(req.body.thumbnailUrl !== undefined && { thumbnailUrl: req.body.thumbnailUrl || '' }),
+      ...(req.body.type !== undefined && { type: req.body.type }),
+      ...(req.body.moduleId !== undefined && { moduleId: req.body.moduleId || null }),
+      ...(req.body.programId !== undefined && { programId: req.body.programId || null })
+    },
+    { new: true }
+  ).lean();
+  if (!updated) throw new AppError('Resource not found', 404, 'NOT_FOUND');
+  return ok(res, updated);
 }
 
 export async function deleteResource(req: any, res: any) {
@@ -179,6 +246,52 @@ export async function listGroups(req: any, res: any) {
   return ok(res, rows);
 }
 
+export async function getGroup(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const group = await GroupModel.findOne({
+    _id: req.params.groupId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!group) throw new AppError('Group not found', 404, 'NOT_FOUND');
+  const assignments = await ProgramAssignmentModel.find({
+    tenantId: req.params.tenantId,
+    groupId: req.params.groupId
+  }).lean();
+  const programIds = assignments.map((a: any) => a.programId);
+  const programs = await ProgramModel.find({ _id: { $in: programIds } }).lean();
+  return ok(res, { group, assignments, programs });
+}
+
+export async function listGroupMembers(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const rows = await GroupMembershipModel.find({
+    tenantId: req.params.tenantId,
+    groupId: req.params.groupId
+  })
+    .populate('userId', 'email fullName')
+    .sort({ createdAt: -1 })
+    .lean();
+  return ok(
+    res,
+    rows.map((row: any) => ({
+      _id: String(row._id),
+      userId: row.userId
+        ? { _id: String(row.userId._id), email: row.userId.email || '', fullName: row.userId.fullName || '' }
+        : null,
+      role: row.role,
+      createdAt: row.createdAt
+    }))
+  );
+}
+
+export async function removeGroupMember(req: any, res: any) {
+  await GroupMembershipModel.deleteOne({
+    tenantId: req.params.tenantId,
+    groupId: req.params.groupId,
+    userId: req.params.userId
+  });
+  return res.status(204).send();
+}
 export async function createGroup(req: any, res: any) {
   const created = await GroupModel.create({
     tenantId: req.params.tenantId,
@@ -215,6 +328,16 @@ export async function listEvents(req: any, res: any) {
   return ok(res, rows);
 }
 
+export async function getEvent(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const event = await EventModel.findOne({
+    _id: req.params.eventId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!event) throw new AppError('Event not found', 404, 'NOT_FOUND');
+  return ok(res, event);
+}
+
 export async function createEvent(req: any, res: any) {
   const created = await EventModel.create({
     tenantId: req.params.tenantId,
@@ -225,9 +348,31 @@ export async function createEvent(req: any, res: any) {
     location: req.body.location || '',
     isOnline: !!req.body.isOnline,
     meetingLink: req.body.meetingLink || '',
+    thumbnailUrl: req.body.thumbnailUrl || '',
     hostUserId: tenantObjectId(req.user.sub)
   });
   return ok(res, created, 201);
+}
+
+export async function updateEvent(req: any, res: any) {
+  const { tenantId, eventId } = req.params;
+  const set: Record<string, unknown> = {
+    title: req.body.title,
+    description: req.body.description ?? '',
+    location: req.body.location ?? '',
+    isOnline: !!req.body.isOnline,
+    meetingLink: req.body.meetingLink ?? '',
+    thumbnailUrl: req.body.thumbnailUrl ?? ''
+  };
+  if (req.body.startsAt) set.startsAt = new Date(req.body.startsAt);
+  if (req.body.endsAt !== undefined) set.endsAt = req.body.endsAt ? new Date(req.body.endsAt) : null;
+  const updated = await EventModel.findOneAndUpdate(
+    { _id: eventId, tenantId },
+    { $set: set },
+    { new: true, runValidators: true }
+  ).lean();
+  if (!updated) throw new AppError('Event not found', 404, 'NOT_FOUND');
+  return ok(res, updated);
 }
 
 export async function deleteEvent(req: any, res: any) {

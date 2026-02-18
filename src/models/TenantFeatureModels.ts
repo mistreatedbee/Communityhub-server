@@ -9,7 +9,8 @@ const announcementSchema = new Schema(
     content: { type: String, required: true },
     isPinned: { type: Boolean, default: false },
     visibility: { type: String, enum: ['PUBLIC', 'MEMBERS', 'LEADERS'], default: 'MEMBERS' },
-    authorUserId: { type: Types.ObjectId, ref: 'User', required: true }
+    authorUserId: { type: Types.ObjectId, ref: 'User', required: true },
+    attachmentUrls: { type: [String], default: [] }
   },
   baseOpts
 );
@@ -22,7 +23,8 @@ const postSchema = new Schema(
     visibility: { type: String, enum: ['PUBLIC', 'MEMBERS', 'LEADERS'], default: 'MEMBERS' },
     isPublished: { type: Boolean, default: true },
     publishedAt: { type: Date, default: Date.now },
-    authorUserId: { type: Types.ObjectId, ref: 'User', required: true }
+    authorUserId: { type: Types.ObjectId, ref: 'User', required: true },
+    mediaUrls: { type: [String], default: [] }
   },
   baseOpts
 );
@@ -33,6 +35,7 @@ const resourceSchema = new Schema(
     title: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
     url: { type: String, default: '' },
+    thumbnailUrl: { type: String, default: '' },
     type: { type: String, default: 'link' },
     folder: { type: String, default: '' },
     groupId: { type: Types.ObjectId, ref: 'Group', default: null },
@@ -73,6 +76,7 @@ const eventSchema = new Schema(
     location: { type: String, default: '' },
     isOnline: { type: Boolean, default: false },
     meetingLink: { type: String, default: '' },
+    thumbnailUrl: { type: String, default: '' },
     hostUserId: { type: Types.ObjectId, ref: 'User', required: true }
   },
   baseOpts
