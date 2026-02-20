@@ -50,12 +50,15 @@ import {
   updateModule,
   updateProgram,
   updateRegistrationField,
+  updateAnnouncement,
   updateResource,
+  updateEvent,
   updateGroup,
   updateTenantHomepageSettings,
   updateTenantSettings,
   updateMyMemberProfile,
-  leaveGroup
+  leaveGroup,
+  getEvent
 } from '../controllers/tenantFeatures.controller.js';
 
 const router = Router({ mergeParams: true });
@@ -66,6 +69,11 @@ router.get('/dashboard', asyncHandler(tenantDashboard));
 
 router.get('/announcements', asyncHandler(listAnnouncements));
 router.post('/announcements', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(createAnnouncement));
+router.put(
+  '/announcements/:id',
+  requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']),
+  asyncHandler(updateAnnouncement)
+);
 router.delete(
   '/announcements/:id',
   requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']),
@@ -91,7 +99,13 @@ router.post('/groups/:groupId/join', asyncHandler(joinGroup));
 router.delete('/groups/:groupId/leave', asyncHandler(leaveGroup));
 
 router.get('/events', asyncHandler(listEvents));
+router.get('/events/:eventId', asyncHandler(getEvent));
 router.post('/events', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(createEvent));
+router.put(
+  '/events/:eventId',
+  requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']),
+  asyncHandler(updateEvent)
+);
 router.delete('/events/:id', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(deleteEvent));
 router.post('/events/:eventId/rsvp', asyncHandler(rsvpEvent));
 

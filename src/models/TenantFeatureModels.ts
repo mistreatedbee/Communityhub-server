@@ -2,6 +2,16 @@ import { Schema, Types, model } from 'mongoose';
 
 const baseOpts = { timestamps: true };
 
+const announcementAttachmentSchema = new Schema(
+  {
+    fileId: { type: Types.ObjectId, required: true },
+    fileName: { type: String, required: true },
+    mimeType: { type: String, default: '' },
+    size: { type: Number, default: 0 }
+  },
+  { _id: false }
+);
+
 const announcementSchema = new Schema(
   {
     tenantId: { type: Types.ObjectId, ref: 'Tenant', required: true, index: true },
@@ -9,7 +19,8 @@ const announcementSchema = new Schema(
     content: { type: String, required: true },
     isPinned: { type: Boolean, default: false },
     visibility: { type: String, enum: ['PUBLIC', 'MEMBERS', 'LEADERS'], default: 'MEMBERS' },
-    authorUserId: { type: Types.ObjectId, ref: 'User', required: true }
+    authorUserId: { type: Types.ObjectId, ref: 'User', required: true },
+    attachments: { type: [announcementAttachmentSchema], default: [] }
   },
   baseOpts
 );
@@ -34,7 +45,12 @@ const resourceSchema = new Schema(
     description: { type: String, default: '' },
     url: { type: String, default: '' },
     thumbnailUrl: { type: String, default: '' },
+    thumbnailFileId: { type: Types.ObjectId, default: null },
     type: { type: String, default: 'link' },
+    fileId: { type: Types.ObjectId, default: null },
+    fileName: { type: String, default: '' },
+    mimeType: { type: String, default: '' },
+    size: { type: Number, default: 0 },
     folder: { type: String, default: '' },
     groupId: { type: Types.ObjectId, ref: 'Group', default: null },
     moduleId: { type: Types.ObjectId, ref: 'ProgramModule', default: null },
@@ -77,6 +93,8 @@ const eventSchema = new Schema(
     isOnline: { type: Boolean, default: false },
     meetingLink: { type: String, default: '' },
     thumbnailUrl: { type: String, default: '' },
+    thumbnailFileId: { type: Types.ObjectId, default: null },
+    thumbnailFileName: { type: String, default: '' },
     hostUserId: { type: Types.ObjectId, ref: 'User', required: true }
   },
   baseOpts

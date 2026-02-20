@@ -19,6 +19,8 @@ import { validate } from '../middleware/validate.js';
 import { inviteMemberSchema } from '../validators/tenant.validators.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import tenantFeaturesRoutes from './tenantFeatures.routes.js';
+import tenantUploadRoutes from './tenantUpload.routes.js';
+import { getTenantFile } from '../controllers/tenantUpload.controller.js';
 
 const router = Router();
 
@@ -40,6 +42,8 @@ router.post(
   validate(inviteMemberSchema),
   asyncHandler(inviteMember)
 );
+router.use('/:tenantId/upload', tenantUploadRoutes);
+router.get('/:tenantId/files/:fileId', auth, asyncHandler(getTenantFile));
 router.use('/:tenantId/features', tenantFeaturesRoutes);
 
 export default router;

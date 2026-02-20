@@ -150,13 +150,20 @@ export async function listAnnouncements(req: any, res: any) {
 
 export async function createAnnouncement(req: any, res: any) {
   const tenantId = req.params.tenantId;
+  const attachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
   const created = await AnnouncementModel.create({
     tenantId,
     title: req.body.title,
     content: req.body.content,
     isPinned: !!req.body.isPinned,
     visibility: req.body.visibility || 'MEMBERS',
-    authorUserId: tenantObjectId(req.user.sub)
+    authorUserId: tenantObjectId(req.user.sub),
+    attachments: attachments.map((a: any) => ({
+      fileId: a.fileId,
+      fileName: a.fileName || '',
+      mimeType: a.mimeType || '',
+      size: a.size || 0
+    }))
   });
   await writeAuditLog({
     actorUserId: req.user.sub,
@@ -165,6 +172,30 @@ export async function createAnnouncement(req: any, res: any) {
     metadata: { announcementId: String(created._id) }
   });
   return ok(res, created, 201);
+}
+
+export async function updateAnnouncement(req: any, res: any) {
+  const tenantId = req.params.tenantId;
+  const update: any = {};
+  if (req.body.title !== undefined) update.title = req.body.title;
+  if (req.body.content !== undefined) update.content = req.body.content;
+  if (req.body.visibility !== undefined) update.visibility = req.body.visibility;
+  if (req.body.isPinned !== undefined) update.isPinned = !!req.body.isPinned;
+  if (Array.isArray(req.body.attachments)) {
+    update.attachments = req.body.attachments.map((a: any) => ({
+      fileId: a.fileId,
+      fileName: a.fileName || '',
+      mimeType: a.mimeType || '',
+      size: a.size || 0
+    }));
+  }
+  const updated = await AnnouncementModel.findOneAndUpdate(
+    { _id: req.params.id, tenantId },
+    update,
+    { new: true }
+  ).lean();
+  if (!updated) throw new AppError('Announcement not found', 404, 'NOT_FOUND');
+  return ok(res, updated);
 }
 
 export async function deleteAnnouncement(req: any, res: any) {
@@ -215,13 +246,19 @@ export async function getResource(req: any, res: any) {
 }
 
 export async function createResource(req: any, res: any) {
+  const type = req.body.fileId ? 'file' : (req.body.type || 'link');
   const created = await TenantResourceModel.create({
     tenantId: req.params.tenantId,
     title: req.body.title,
     description: req.body.description || '',
     url: req.body.url || '',
     thumbnailUrl: req.body.thumbnailUrl || '',
-    type: req.body.type || 'link',
+    thumbnailFileId: req.body.thumbnailFileId || null,
+    type,
+    fileId: req.body.fileId || null,
+    fileName: req.body.fileName || '',
+    mimeType: req.body.mimeType || '',
+    size: req.body.size ?? 0,
     folder: req.body.folder || '',
     groupId: req.body.groupId || null,
     moduleId: req.body.moduleId || null,
@@ -232,17 +269,22 @@ export async function createResource(req: any, res: any) {
 }
 
 export async function updateResource(req: any, res: any) {
+  const update: any = {};
+  if (req.body.title !== undefined) update.title = req.body.title;
+  if (req.body.description !== undefined) update.description = req.body.description;
+  if (req.body.url !== undefined) update.url = req.body.url;
+  if (req.body.thumbnailUrl !== undefined) update.thumbnailUrl = req.body.thumbnailUrl;
+  if (req.body.thumbnailFileId !== undefined) update.thumbnailFileId = req.body.thumbnailFileId || null;
+  if (req.body.type !== undefined) update.type = req.body.type;
+  if (req.body.fileId !== undefined) update.fileId = req.body.fileId || null;
+  if (req.body.fileName !== undefined) update.fileName = req.body.fileName;
+  if (req.body.mimeType !== undefined) update.mimeType = req.body.mimeType;
+  if (req.body.size !== undefined) update.size = req.body.size;
+  if (req.body.moduleId !== undefined) update.moduleId = req.body.moduleId || null;
+  if (req.body.programId !== undefined) update.programId = req.body.programId || null;
   const updated = await TenantResourceModel.findOneAndUpdate(
     { _id: req.params.resourceId, tenantId: req.params.tenantId },
-    {
-      ...(req.body.title !== undefined && { title: req.body.title }),
-      ...(req.body.description !== undefined && { description: req.body.description }),
-      ...(req.body.url !== undefined && { url: req.body.url }),
-      ...(req.body.thumbnailUrl !== undefined && { thumbnailUrl: req.body.thumbnailUrl }),
-      ...(req.body.type !== undefined && { type: req.body.type }),
-      ...(req.body.moduleId !== undefined && { moduleId: req.body.moduleId || null }),
-      ...(req.body.programId !== undefined && { programId: req.body.programId || null })
-    },
+    update,
     { new: true }
   ).lean();
   if (!updated) throw new AppError('Resource not found', 404, 'NOT_FOUND');
@@ -339,6 +381,16 @@ export async function listEvents(req: any, res: any) {
   return ok(res, rows);
 }
 
+export async function getEvent(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const event = await EventModel.findOne({
+    _id: req.params.eventId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!event) throw new AppError('Event not found', 404, 'NOT_FOUND');
+  return ok(res, event);
+}
+
 export async function createEvent(req: any, res: any) {
   const created = await EventModel.create({
     tenantId: req.params.tenantId,
@@ -350,9 +402,32 @@ export async function createEvent(req: any, res: any) {
     isOnline: !!req.body.isOnline,
     meetingLink: req.body.meetingLink || '',
     thumbnailUrl: req.body.thumbnailUrl || '',
+    thumbnailFileId: req.body.thumbnailFileId || null,
+    thumbnailFileName: req.body.thumbnailFileName || '',
     hostUserId: tenantObjectId(req.user.sub)
   });
   return ok(res, created, 201);
+}
+
+export async function updateEvent(req: any, res: any) {
+  const update: any = {};
+  if (req.body.title !== undefined) update.title = req.body.title;
+  if (req.body.description !== undefined) update.description = req.body.description;
+  if (req.body.startsAt !== undefined) update.startsAt = new Date(req.body.startsAt);
+  if (req.body.endsAt !== undefined) update.endsAt = req.body.endsAt ? new Date(req.body.endsAt) : null;
+  if (req.body.location !== undefined) update.location = req.body.location;
+  if (req.body.isOnline !== undefined) update.isOnline = !!req.body.isOnline;
+  if (req.body.meetingLink !== undefined) update.meetingLink = req.body.meetingLink;
+  if (req.body.thumbnailUrl !== undefined) update.thumbnailUrl = req.body.thumbnailUrl;
+  if (req.body.thumbnailFileId !== undefined) update.thumbnailFileId = req.body.thumbnailFileId || null;
+  if (req.body.thumbnailFileName !== undefined) update.thumbnailFileName = req.body.thumbnailFileName;
+  const updated = await EventModel.findOneAndUpdate(
+    { _id: req.params.eventId, tenantId: req.params.tenantId },
+    update,
+    { new: true }
+  ).lean();
+  if (!updated) throw new AppError('Event not found', 404, 'NOT_FOUND');
+  return ok(res, updated);
 }
 
 export async function deleteEvent(req: any, res: any) {
