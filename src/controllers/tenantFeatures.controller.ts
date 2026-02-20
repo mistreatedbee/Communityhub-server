@@ -445,7 +445,7 @@ export async function addResourceToModule(req: any, res: any) {
     tenantId: req.params.tenantId
   });
   if (!module_) throw new AppError('Module not found', 404, 'NOT_FOUND');
-  resource.moduleId = module_._id;
+  resource.moduleId = module_._id as any;
   resource.programId = req.params.programId;
   await resource.save();
   return ok(res, resource.toObject ? resource.toObject() : resource, 200);
