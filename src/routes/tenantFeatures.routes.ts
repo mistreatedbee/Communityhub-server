@@ -23,6 +23,7 @@ import {
   getModule,
   getProgram,
   getResource,
+  getTenantHomepageSettings,
   getTenantSettings,
   getMyMemberProfile,
   getGroup,
@@ -51,6 +52,7 @@ import {
   updateRegistrationField,
   updateResource,
   updateGroup,
+  updateTenantHomepageSettings,
   updateTenantSettings,
   updateMyMemberProfile,
   leaveGroup
@@ -126,5 +128,7 @@ router.put('/registration-fields/:id', requireTenantRole(['OWNER', 'ADMIN']), as
 
 router.get('/settings', requireTenantRole(['OWNER', 'ADMIN']), asyncHandler(getTenantSettings));
 router.put('/settings', requireTenantRole(['OWNER', 'ADMIN']), asyncHandler(updateTenantSettings));
+router.get('/home-settings', asyncHandler(getTenantHomepageSettings));
+router.put('/home-settings', requireTenantRole(['OWNER', 'ADMIN']), asyncHandler(updateTenantHomepageSettings));
 
 export default router;

@@ -13,6 +13,7 @@ import {
   ProgramModel,
   ProgramModuleModel,
   RegistrationFieldModel,
+  TenantHomepageSettingsModel,
   TenantPostModel,
   TenantResourceModel,
   TenantSettingsModel
@@ -44,6 +45,55 @@ async function ensureMembership(tenantId: string, userId: string) {
     status: 'ACTIVE'
   }).lean();
   if (!row) throw new AppError('Not a tenant member', 403, 'FORBIDDEN');
+}
+
+function defaultHomepageSections() {
+  return {
+    sectionOrder: ['hero', 'vision', 'announcements', 'events', 'programs', 'groups', 'gallery'] as string[],
+    hero: {
+      enabled: true,
+      headline: 'Welcome to our community',
+      subheadline: 'Connect, learn, and grow together.',
+      ctaLabel: 'Explore events',
+      ctaLink: 'events',
+      heroImageUrl: '',
+      heroLogoUrl: '',
+      overlayColor: 'rgba(15,23,42,0.45)'
+    },
+    vision: {
+      enabled: true,
+      title: 'Vision, Strategy, and Objectives',
+      content: '- Build meaningful connections\n- Share knowledge\n- Grow community impact'
+    },
+    gallery: {
+      enabled: false,
+      images: [] as Array<{ url: string; caption?: string; order: number }>
+    },
+    events: {
+      enabled: true,
+      title: 'Upcoming Events',
+      showCount: 3
+    },
+    programs: {
+      enabled: true,
+      title: 'Featured Programs',
+      showCount: 3
+    },
+    groups: {
+      enabled: true,
+      title: 'Groups',
+      showCount: 3,
+      featuredGroupIds: [] as string[]
+    },
+    calendar: {
+      enabled: false,
+      title: 'Calendar'
+    },
+    announcements: {
+      enabled: true,
+      title: 'Pinned Updates'
+    }
+  };
 }
 
 export async function tenantDashboard(req: any, res: any) {
@@ -770,5 +820,50 @@ export async function updateTenantSettings(req: any, res: any) {
     },
     { new: true, upsert: true }
   ).lean();
+  return ok(res, row);
+}
+
+export async function getTenantHomepageSettings(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const row =
+    (await TenantHomepageSettingsModel.findOne({ tenantId: req.params.tenantId }).lean()) ||
+    (await TenantHomepageSettingsModel.create({
+      tenantId: req.params.tenantId,
+      theme: { primaryColor: '', secondaryColor: '', logoUrl: '' },
+      sections: defaultHomepageSections(),
+      publishedAt: new Date()
+    }));
+
+  return ok(res, {
+    ...row,
+    sections: row.sections || defaultHomepageSections()
+  });
+}
+
+export async function updateTenantHomepageSettings(req: any, res: any) {
+  const sections = req.body?.sections && typeof req.body.sections === 'object' ? req.body.sections : defaultHomepageSections();
+  const theme = req.body?.theme && typeof req.body.theme === 'object' ? req.body.theme : {};
+
+  const row = await TenantHomepageSettingsModel.findOneAndUpdate(
+    { tenantId: req.params.tenantId },
+    {
+      theme: {
+        primaryColor: String(theme.primaryColor || ''),
+        secondaryColor: String(theme.secondaryColor || ''),
+        logoUrl: String(theme.logoUrl || '')
+      },
+      sections,
+      publishedAt: new Date()
+    },
+    { new: true, upsert: true }
+  ).lean();
+
+  await writeAuditLog({
+    actorUserId: req.user.sub,
+    tenantId: req.params.tenantId,
+    action: 'TENANT_HOMEPAGE_SETTINGS_UPDATED',
+    metadata: {}
+  });
+
   return ok(res, row);
 }

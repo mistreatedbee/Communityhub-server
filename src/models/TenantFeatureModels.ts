@@ -192,6 +192,20 @@ const tenantSettingsSchema = new Schema(
   baseOpts
 );
 
+const tenantHomepageSettingsSchema = new Schema(
+  {
+    tenantId: { type: Types.ObjectId, ref: 'Tenant', required: true, unique: true, index: true },
+    theme: {
+      primaryColor: { type: String, default: '' },
+      secondaryColor: { type: String, default: '' },
+      logoUrl: { type: String, default: '' }
+    },
+    sections: { type: Schema.Types.Mixed, default: {} },
+    publishedAt: { type: Date, default: null }
+  },
+  baseOpts
+);
+
 export const AnnouncementModel = model('Announcement', announcementSchema);
 export const TenantPostModel = model('TenantPost', postSchema);
 export const TenantResourceModel = model('TenantResource', resourceSchema);
@@ -207,3 +221,4 @@ export const InvitationModel = model('Invitation', invitationSchema);
 export const NotificationModel = model('Notification', notificationSchema);
 export const RegistrationFieldModel = model('RegistrationField', registrationFieldSchema);
 export const TenantSettingsModel = model('TenantSettings', tenantSettingsSchema);
+export const TenantHomepageSettingsModel = model('TenantHomepageSettings', tenantHomepageSettingsSchema);
