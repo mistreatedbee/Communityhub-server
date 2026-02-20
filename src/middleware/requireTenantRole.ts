@@ -8,14 +8,16 @@ export function requireTenantRole(roles: TenantRole[]) {
     if (!req.user) return fail(res, 'Unauthorized', 401, 'UNAUTHORIZED');
     if (req.user.globalRole === 'SUPER_ADMIN') return next();
 
+    // Prefer route param for tenant-scoped paths to prevent parameter substitution
     const tenantIdRaw =
-      req.params.tenantId || req.body?.tenantId || req.query.tenantId || req.params.id || '';
-    if (!tenantIdRaw || !Types.ObjectId.isValid(String(tenantIdRaw))) {
+      req.params.tenantId ?? req.params.id ?? req.body?.tenantId ?? req.query?.tenantId ?? '';
+    const tenantIdStr = String(tenantIdRaw).trim();
+    if (!tenantIdStr || !Types.ObjectId.isValid(tenantIdStr)) {
       return fail(res, 'Valid tenantId is required', 400, 'VALIDATION_ERROR');
     }
 
     const membership = await MembershipModel.findOne({
-      tenantId: tenantIdRaw,
+      tenantId: tenantIdStr,
       userId: req.user.sub,
       status: 'ACTIVE'
     }).lean();

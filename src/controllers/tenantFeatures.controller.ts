@@ -314,7 +314,13 @@ export async function getGroup(req: any, res: any) {
     groupId: req.params.groupId
   }).lean();
   const programIds = assignments.map((a: any) => a.programId);
-  const programs = await ProgramModel.find({ _id: { $in: programIds } }).lean();
+  const programs =
+    programIds.length > 0
+      ? await ProgramModel.find({
+          tenantId: req.params.tenantId,
+          _id: { $in: programIds }
+        }).lean()
+      : [];
   return ok(res, { group, assignments, programs });
 }
 
@@ -350,9 +356,13 @@ export async function listGroupPrograms(req: any, res: any) {
     groupId: req.params.groupId
   }).lean();
   const programIds = assignments.map((a: any) => a.programId);
-  const programs = programIds.length
-    ? await ProgramModel.find({ _id: { $in: programIds } }).lean()
-    : [];
+  const programs =
+    programIds.length > 0
+      ? await ProgramModel.find({
+          tenantId: req.params.tenantId,
+          _id: { $in: programIds }
+        }).lean()
+      : [];
   return ok(res, programs);
 }
 
@@ -497,7 +507,11 @@ export async function deleteEvent(req: any, res: any) {
 
 export async function rsvpEvent(req: any, res: any) {
   const row = await EventRsvpModel.findOneAndUpdate(
-    { eventId: req.params.eventId, userId: tenantObjectId(req.user.sub) },
+    {
+      tenantId: req.params.tenantId,
+      eventId: req.params.eventId,
+      userId: tenantObjectId(req.user.sub)
+    },
     {
       tenantId: req.params.tenantId,
       eventId: req.params.eventId,
@@ -574,9 +588,17 @@ export async function getModule(req: any, res: any) {
 }
 
 export async function createProgramModule(req: any, res: any) {
+  const programId = req.body.programId;
+  if (!programId) throw new AppError('programId is required', 400, 'VALIDATION_ERROR');
+  const program = await ProgramModel.findOne({
+    _id: programId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!program) throw new AppError('Program not found', 404, 'NOT_FOUND');
+
   const created = await ProgramModuleModel.create({
     tenantId: req.params.tenantId,
-    programId: req.body.programId,
+    programId,
     title: req.body.title,
     description: req.body.description || '',
     order: req.body.order || 0
@@ -651,17 +673,22 @@ export async function removeResourceFromModule(req: any, res: any) {
 }
 
 export async function assignProgram(req: any, res: any) {
+  const programId = req.body.programId;
+  const groupId = req.body.groupId;
+  if (!programId || !groupId) {
+    throw new AppError('programId and groupId are required', 400, 'VALIDATION_ERROR');
+  }
+  const tenantId = req.params.tenantId;
+  const [program, group] = await Promise.all([
+    ProgramModel.findOne({ _id: programId, tenantId }).lean(),
+    GroupModel.findOne({ _id: groupId, tenantId }).lean()
+  ]);
+  if (!program) throw new AppError('Program not found', 404, 'NOT_FOUND');
+  if (!group) throw new AppError('Group not found', 404, 'NOT_FOUND');
+
   const row = await ProgramAssignmentModel.findOneAndUpdate(
-    {
-      tenantId: req.params.tenantId,
-      programId: req.body.programId,
-      groupId: req.body.groupId
-    },
-    {
-      tenantId: req.params.tenantId,
-      programId: req.body.programId,
-      groupId: req.body.groupId
-    },
+    { tenantId, programId, groupId },
+    { tenantId, programId, groupId },
     { upsert: true, new: true }
   ).lean();
   return ok(res, row, 201);
@@ -901,7 +928,11 @@ export async function updateMyMemberProfile(req: any, res: any) {
 
 export async function markNotificationRead(req: any, res: any) {
   const row = await NotificationModel.findOneAndUpdate(
-    { _id: req.params.id, userId: tenantObjectId(req.user.sub) },
+    {
+      _id: req.params.id,
+      tenantId: req.params.tenantId,
+      userId: tenantObjectId(req.user.sub)
+    },
     { readAt: new Date() },
     { new: true }
   ).lean();
@@ -929,9 +960,19 @@ export async function createRegistrationField(req: any, res: any) {
 }
 
 export async function updateRegistrationField(req: any, res: any) {
+  const update: Record<string, unknown> = {};
+  if (req.body.key !== undefined) update.key = req.body.key;
+  if (req.body.label !== undefined) update.label = req.body.label;
+  if (req.body.fieldType !== undefined) update.fieldType = req.body.fieldType;
+  if (req.body.required !== undefined) update.required = !!req.body.required;
+  if (req.body.options !== undefined)
+    update.options = Array.isArray(req.body.options) ? req.body.options : [];
+  if (req.body.fieldOrder !== undefined) update.fieldOrder = Number(req.body.fieldOrder) ?? 0;
+  if (req.body.isActive !== undefined) update.isActive = !!req.body.isActive;
+
   const row = await RegistrationFieldModel.findOneAndUpdate(
     { tenantId: req.params.tenantId, _id: req.params.id },
-    req.body,
+    update,
     { new: true }
   ).lean();
   if (!row) throw new AppError('Field not found', 404, 'NOT_FOUND');
