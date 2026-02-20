@@ -68,7 +68,7 @@ const router = Router({ mergeParams: true });
 
 router.use(auth);
 
-router.get('/dashboard', asyncHandler(tenantDashboard));
+router.get('/dashboard', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(tenantDashboard));
 
 router.get('/announcements', asyncHandler(listAnnouncements));
 router.post('/announcements', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(createAnnouncement));
