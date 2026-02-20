@@ -356,7 +356,58 @@ export async function listGroupPrograms(req: any, res: any) {
   return ok(res, programs);
 }
 
+export async function listGroupMembers(req: any, res: any) {
+  const group = await GroupModel.findOne({
+    _id: req.params.groupId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!group) throw new AppError('Group not found', 404, 'NOT_FOUND');
+  const rows = await GroupMembershipModel.find({
+    groupId: req.params.groupId,
+    tenantId: req.params.tenantId
+  })
+    .populate('userId', 'email fullName')
+    .sort({ createdAt: 1 })
+    .lean();
+  return ok(res, rows);
+}
+
+export async function removeGroupMember(req: any, res: any) {
+  const group = await GroupModel.findOne({
+    _id: req.params.groupId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!group) throw new AppError('Group not found', 404, 'NOT_FOUND');
+  const result = await GroupMembershipModel.deleteOne({
+    groupId: req.params.groupId,
+    userId: tenantObjectId(req.params.userId),
+    tenantId: req.params.tenantId
+  });
+  if (result.deletedCount === 0) throw new AppError('Group membership not found', 404, 'NOT_FOUND');
+  return res.status(204).send();
+}
+
+export async function listGroupResources(req: any, res: any) {
+  const group = await GroupModel.findOne({
+    _id: req.params.groupId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!group) throw new AppError('Group not found', 404, 'NOT_FOUND');
+  const rows = await TenantResourceModel.find({
+    tenantId: req.params.tenantId,
+    groupId: req.params.groupId
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+  return ok(res, rows);
+}
+
 export async function joinGroup(req: any, res: any) {
+  const group = await GroupModel.findOne({
+    _id: req.params.groupId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!group) throw new AppError('Group not found', 404, 'NOT_FOUND');
   const created = await GroupMembershipModel.findOneAndUpdate(
     { groupId: req.params.groupId, userId: tenantObjectId(req.user.sub) },
     {
@@ -371,7 +422,16 @@ export async function joinGroup(req: any, res: any) {
 }
 
 export async function leaveGroup(req: any, res: any) {
-  await GroupMembershipModel.deleteOne({ groupId: req.params.groupId, userId: tenantObjectId(req.user.sub) });
+  const group = await GroupModel.findOne({
+    _id: req.params.groupId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!group) throw new AppError('Group not found', 404, 'NOT_FOUND');
+  await GroupMembershipModel.deleteOne({
+    groupId: req.params.groupId,
+    userId: tenantObjectId(req.user.sub),
+    tenantId: req.params.tenantId
+  });
   return res.status(204).send();
 }
 

@@ -28,11 +28,15 @@ import {
   getMyMemberProfile,
   getGroup,
   joinGroup,
+  leaveGroup,
+  listGroupMembers,
+  listGroupResources,
   listAnnouncements,
   listEvents,
   listInvitations,
   listGroupPrograms,
   listMembers,
+  removeGroupMember,
   listNotifications,
   listPosts,
   listPrograms,
@@ -57,7 +61,6 @@ import {
   updateTenantHomepageSettings,
   updateTenantSettings,
   updateMyMemberProfile,
-  leaveGroup,
   getEvent
 } from '../controllers/tenantFeatures.controller.js';
 
@@ -95,6 +98,21 @@ router.get('/groups/:groupId', asyncHandler(getGroup));
 router.get('/groups/:groupId/programs', asyncHandler(listGroupPrograms));
 router.post('/groups', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(createGroup));
 router.put('/groups/:groupId', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(updateGroup));
+router.get(
+  '/groups/:groupId/members',
+  requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']),
+  asyncHandler(listGroupMembers)
+);
+router.delete(
+  '/groups/:groupId/members/:userId',
+  requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']),
+  asyncHandler(removeGroupMember)
+);
+router.get(
+  '/groups/:groupId/resources',
+  requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']),
+  asyncHandler(listGroupResources)
+);
 router.post('/groups/:groupId/join', asyncHandler(joinGroup));
 router.delete('/groups/:groupId/leave', asyncHandler(leaveGroup));
 
