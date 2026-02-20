@@ -13,6 +13,7 @@ import {
   ProgramModel,
   ProgramModuleModel,
   RegistrationFieldModel,
+  TenantHomepageSettingsModel,
   TenantPostModel,
   TenantResourceModel,
   TenantSettingsModel
@@ -44,6 +45,55 @@ async function ensureMembership(tenantId: string, userId: string) {
     status: 'ACTIVE'
   }).lean();
   if (!row) throw new AppError('Not a tenant member', 403, 'FORBIDDEN');
+}
+
+function defaultHomepageSections() {
+  return {
+    sectionOrder: ['hero', 'vision', 'announcements', 'events', 'programs', 'groups', 'gallery'] as string[],
+    hero: {
+      enabled: true,
+      headline: 'Welcome to our community',
+      subheadline: 'Connect, learn, and grow together.',
+      ctaLabel: 'Explore events',
+      ctaLink: 'events',
+      heroImageUrl: '',
+      heroLogoUrl: '',
+      overlayColor: 'rgba(15,23,42,0.45)'
+    },
+    vision: {
+      enabled: true,
+      title: 'Vision, Strategy, and Objectives',
+      content: '- Build meaningful connections\n- Share knowledge\n- Grow community impact'
+    },
+    gallery: {
+      enabled: false,
+      images: [] as Array<{ url: string; caption?: string; order: number }>
+    },
+    events: {
+      enabled: true,
+      title: 'Upcoming Events',
+      showCount: 3
+    },
+    programs: {
+      enabled: true,
+      title: 'Featured Programs',
+      showCount: 3
+    },
+    groups: {
+      enabled: true,
+      title: 'Groups',
+      showCount: 3,
+      featuredGroupIds: [] as string[]
+    },
+    calendar: {
+      enabled: false,
+      title: 'Calendar'
+    },
+    announcements: {
+      enabled: true,
+      title: 'Pinned Updates'
+    }
+  };
 }
 
 export async function tenantDashboard(req: any, res: any) {
@@ -106,8 +156,7 @@ export async function createAnnouncement(req: any, res: any) {
     content: req.body.content,
     isPinned: !!req.body.isPinned,
     visibility: req.body.visibility || 'MEMBERS',
-    authorUserId: tenantObjectId(req.user.sub),
-    attachmentUrls: Array.isArray(req.body.attachmentUrls) ? req.body.attachmentUrls : []
+    authorUserId: tenantObjectId(req.user.sub)
   });
   await writeAuditLog({
     actorUserId: req.user.sub,
@@ -116,31 +165,6 @@ export async function createAnnouncement(req: any, res: any) {
     metadata: { announcementId: String(created._id) }
   });
   return ok(res, created, 201);
-}
-
-export async function updateAnnouncement(req: any, res: any) {
-  const { tenantId, id } = req.params;
-  const updated = await AnnouncementModel.findOneAndUpdate(
-    { _id: id, tenantId },
-    {
-      $set: {
-        title: req.body.title,
-        content: req.body.content,
-        isPinned: !!req.body.isPinned,
-        visibility: req.body.visibility || 'MEMBERS',
-        ...(Array.isArray(req.body.attachmentUrls) && { attachmentUrls: req.body.attachmentUrls })
-      }
-    },
-    { new: true, runValidators: true }
-  ).lean();
-  if (!updated) return res.status(404).json({ error: { message: 'Announcement not found' } });
-  await writeAuditLog({
-    actorUserId: req.user.sub,
-    tenantId,
-    action: 'ANNOUNCEMENT_UPDATE',
-    metadata: { announcementId: id }
-  });
-  return ok(res, updated);
 }
 
 export async function deleteAnnouncement(req: any, res: any) {
@@ -164,29 +188,9 @@ export async function createPost(req: any, res: any) {
     visibility: req.body.visibility || 'MEMBERS',
     isPublished: req.body.isPublished ?? true,
     publishedAt: req.body.publishedAt ? new Date(req.body.publishedAt) : new Date(),
-    authorUserId: tenantObjectId(req.user.sub),
-    mediaUrls: Array.isArray(req.body.mediaUrls) ? req.body.mediaUrls : []
+    authorUserId: tenantObjectId(req.user.sub)
   });
   return ok(res, created, 201);
-}
-
-export async function updatePost(req: any, res: any) {
-  const { tenantId, id } = req.params;
-  const updated = await TenantPostModel.findOneAndUpdate(
-    { _id: id, tenantId },
-    {
-      $set: {
-        title: req.body.title,
-        content: req.body.content,
-        visibility: req.body.visibility || 'MEMBERS',
-        isPublished: req.body.isPublished ?? true,
-        ...(Array.isArray(req.body.mediaUrls) && { mediaUrls: req.body.mediaUrls })
-      }
-    },
-    { new: true, runValidators: true }
-  ).lean();
-  if (!updated) return res.status(404).json({ error: { message: 'Post not found' } });
-  return ok(res, updated);
 }
 
 export async function deletePost(req: any, res: any) {
@@ -234,7 +238,7 @@ export async function updateResource(req: any, res: any) {
       ...(req.body.title !== undefined && { title: req.body.title }),
       ...(req.body.description !== undefined && { description: req.body.description }),
       ...(req.body.url !== undefined && { url: req.body.url }),
-      ...(req.body.thumbnailUrl !== undefined && { thumbnailUrl: req.body.thumbnailUrl || '' }),
+      ...(req.body.thumbnailUrl !== undefined && { thumbnailUrl: req.body.thumbnailUrl }),
       ...(req.body.type !== undefined && { type: req.body.type }),
       ...(req.body.moduleId !== undefined && { moduleId: req.body.moduleId || null }),
       ...(req.body.programId !== undefined && { programId: req.body.programId || null })
@@ -272,47 +276,6 @@ export async function getGroup(req: any, res: any) {
   return ok(res, { group, assignments, programs });
 }
 
-export async function listGroupPrograms(req: any, res: any) {
-  await ensureMembership(req.params.tenantId, req.user.sub);
-  const assignments = await ProgramAssignmentModel.find({
-    tenantId: req.params.tenantId,
-    groupId: req.params.groupId
-  }).lean();
-  const programIds = assignments.map((a: any) => a.programId);
-  const programs = await ProgramModel.find({ _id: { $in: programIds } }).lean();
-  return ok(res, programs);
-}
-
-export async function listGroupMembers(req: any, res: any) {
-  await ensureMembership(req.params.tenantId, req.user.sub);
-  const rows = await GroupMembershipModel.find({
-    tenantId: req.params.tenantId,
-    groupId: req.params.groupId
-  })
-    .populate('userId', 'email fullName')
-    .sort({ createdAt: -1 })
-    .lean();
-  return ok(
-    res,
-    rows.map((row: any) => ({
-      _id: String(row._id),
-      userId: row.userId
-        ? { _id: String(row.userId._id), email: row.userId.email || '', fullName: row.userId.fullName || '' }
-        : null,
-      role: row.role,
-      createdAt: row.createdAt
-    }))
-  );
-}
-
-export async function removeGroupMember(req: any, res: any) {
-  await GroupMembershipModel.deleteOne({
-    tenantId: req.params.tenantId,
-    groupId: req.params.groupId,
-    userId: req.params.userId
-  });
-  return res.status(204).send();
-}
 export async function createGroup(req: any, res: any) {
   const created = await GroupModel.create({
     tenantId: req.params.tenantId,
@@ -322,6 +285,33 @@ export async function createGroup(req: any, res: any) {
     createdBy: tenantObjectId(req.user.sub)
   });
   return ok(res, created, 201);
+}
+
+export async function updateGroup(req: any, res: any) {
+  const updated = await GroupModel.findOneAndUpdate(
+    { _id: req.params.groupId, tenantId: req.params.tenantId },
+    {
+      ...(req.body.name !== undefined && { name: req.body.name }),
+      ...(req.body.description !== undefined && { description: req.body.description }),
+      ...(req.body.isPrivate !== undefined && { isPrivate: !!req.body.isPrivate })
+    },
+    { new: true }
+  ).lean();
+  if (!updated) throw new AppError('Group not found', 404, 'NOT_FOUND');
+  return ok(res, updated);
+}
+
+export async function listGroupPrograms(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const assignments = await ProgramAssignmentModel.find({
+    tenantId: req.params.tenantId,
+    groupId: req.params.groupId
+  }).lean();
+  const programIds = assignments.map((a: any) => a.programId);
+  const programs = programIds.length
+    ? await ProgramModel.find({ _id: { $in: programIds } }).lean()
+    : [];
+  return ok(res, programs);
 }
 
 export async function joinGroup(req: any, res: any) {
@@ -349,16 +339,6 @@ export async function listEvents(req: any, res: any) {
   return ok(res, rows);
 }
 
-export async function getEvent(req: any, res: any) {
-  await ensureMembership(req.params.tenantId, req.user.sub);
-  const event = await EventModel.findOne({
-    _id: req.params.eventId,
-    tenantId: req.params.tenantId
-  }).lean();
-  if (!event) throw new AppError('Event not found', 404, 'NOT_FOUND');
-  return ok(res, event);
-}
-
 export async function createEvent(req: any, res: any) {
   const created = await EventModel.create({
     tenantId: req.params.tenantId,
@@ -373,27 +353,6 @@ export async function createEvent(req: any, res: any) {
     hostUserId: tenantObjectId(req.user.sub)
   });
   return ok(res, created, 201);
-}
-
-export async function updateEvent(req: any, res: any) {
-  const { tenantId, eventId } = req.params;
-  const set: Record<string, unknown> = {
-    title: req.body.title,
-    description: req.body.description ?? '',
-    location: req.body.location ?? '',
-    isOnline: !!req.body.isOnline,
-    meetingLink: req.body.meetingLink ?? '',
-    thumbnailUrl: req.body.thumbnailUrl ?? ''
-  };
-  if (req.body.startsAt) set.startsAt = new Date(req.body.startsAt);
-  if (req.body.endsAt !== undefined) set.endsAt = req.body.endsAt ? new Date(req.body.endsAt) : null;
-  const updated = await EventModel.findOneAndUpdate(
-    { _id: eventId, tenantId },
-    { $set: set },
-    { new: true, runValidators: true }
-  ).lean();
-  if (!updated) throw new AppError('Event not found', 404, 'NOT_FOUND');
-  return ok(res, updated);
 }
 
 export async function deleteEvent(req: any, res: any) {
@@ -425,14 +384,58 @@ export async function listPrograms(req: any, res: any) {
   return ok(res, { programs, modules, assignments });
 }
 
+export async function getProgram(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const program = await ProgramModel.findOne({
+    _id: req.params.programId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!program) throw new AppError('Program not found', 404, 'NOT_FOUND');
+  const [modules, assignments] = await Promise.all([
+    ProgramModuleModel.find({ tenantId: req.params.tenantId, programId: req.params.programId }).sort({ order: 1 }).lean(),
+    ProgramAssignmentModel.find({ tenantId: req.params.tenantId, programId: req.params.programId }).lean()
+  ]);
+  return ok(res, { program, modules, assignments });
+}
+
 export async function createProgram(req: any, res: any) {
   const created = await ProgramModel.create({
     tenantId: req.params.tenantId,
     title: req.body.title,
     description: req.body.description || '',
+    status: req.body.status || 'ACTIVE',
     createdBy: tenantObjectId(req.user.sub)
   });
   return ok(res, created, 201);
+}
+
+export async function updateProgram(req: any, res: any) {
+  const updated = await ProgramModel.findOneAndUpdate(
+    { _id: req.params.programId, tenantId: req.params.tenantId },
+    {
+      ...(req.body.title !== undefined && { title: req.body.title }),
+      ...(req.body.description !== undefined && { description: req.body.description }),
+      ...(req.body.status !== undefined && { status: req.body.status })
+    },
+    { new: true }
+  ).lean();
+  if (!updated) throw new AppError('Program not found', 404, 'NOT_FOUND');
+  return ok(res, updated);
+}
+
+export async function getModule(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const module_ = await ProgramModuleModel.findOne({
+    _id: req.params.moduleId,
+    programId: req.params.programId,
+    tenantId: req.params.tenantId
+  }).lean();
+  if (!module_) throw new AppError('Module not found', 404, 'NOT_FOUND');
+  const resources = await TenantResourceModel.find({
+    tenantId: req.params.tenantId,
+    moduleId: req.params.moduleId
+  }).lean();
+  return ok(res, { module: module_, resources });
 }
 
 export async function createProgramModule(req: any, res: any) {
@@ -446,13 +449,100 @@ export async function createProgramModule(req: any, res: any) {
   return ok(res, created, 201);
 }
 
-export async function assignProgram(req: any, res: any) {
-  const created = await ProgramAssignmentModel.create({
-    tenantId: req.params.tenantId,
-    programId: req.body.programId,
-    groupId: req.body.groupId
+export async function updateModule(req: any, res: any) {
+  const updated = await ProgramModuleModel.findOneAndUpdate(
+    {
+      _id: req.params.moduleId,
+      programId: req.params.programId,
+      tenantId: req.params.tenantId
+    },
+    {
+      ...(req.body.title !== undefined && { title: req.body.title }),
+      ...(req.body.description !== undefined && { description: req.body.description }),
+      ...(req.body.order !== undefined && { order: req.body.order })
+    },
+    { new: true }
+  ).lean();
+  if (!updated) throw new AppError('Module not found', 404, 'NOT_FOUND');
+  return ok(res, updated);
+}
+
+export async function deleteModule(req: any, res: any) {
+  const result = await ProgramModuleModel.deleteOne({
+    _id: req.params.moduleId,
+    programId: req.params.programId,
+    tenantId: req.params.tenantId
   });
-  return ok(res, created, 201);
+  if (result.deletedCount === 0) throw new AppError('Module not found', 404, 'NOT_FOUND');
+  await TenantResourceModel.updateMany(
+    { tenantId: req.params.tenantId, moduleId: req.params.moduleId },
+    { $unset: { moduleId: 1, programId: 1 } }
+  );
+  return res.status(204).send();
+}
+
+export async function addResourceToModule(req: any, res: any) {
+  const resourceId = req.body.resourceId;
+  if (!resourceId) throw new AppError('resourceId is required', 400, 'VALIDATION_ERROR');
+  const resource = await TenantResourceModel.findOne({
+    _id: resourceId,
+    tenantId: req.params.tenantId
+  });
+  if (!resource) throw new AppError('Resource not found', 404, 'NOT_FOUND');
+  const module_ = await ProgramModuleModel.findOne({
+    _id: req.params.moduleId,
+    programId: req.params.programId,
+    tenantId: req.params.tenantId
+  });
+  if (!module_) throw new AppError('Module not found', 404, 'NOT_FOUND');
+  resource.moduleId = module_._id as any;
+  resource.programId = req.params.programId;
+  await resource.save();
+  return ok(res, resource.toObject ? resource.toObject() : resource, 200);
+}
+
+export async function removeResourceFromModule(req: any, res: any) {
+  const updated = await TenantResourceModel.findOneAndUpdate(
+    {
+      _id: req.params.resourceId,
+      tenantId: req.params.tenantId,
+      moduleId: req.params.moduleId
+    },
+    { $unset: { moduleId: 1, programId: 1 } },
+    { new: true }
+  ).lean();
+  if (!updated) throw new AppError('Resource not found or not in this module', 404, 'NOT_FOUND');
+  return ok(res, updated, 200);
+}
+
+export async function assignProgram(req: any, res: any) {
+  const row = await ProgramAssignmentModel.findOneAndUpdate(
+    {
+      tenantId: req.params.tenantId,
+      programId: req.body.programId,
+      groupId: req.body.groupId
+    },
+    {
+      tenantId: req.params.tenantId,
+      programId: req.body.programId,
+      groupId: req.body.groupId
+    },
+    { upsert: true, new: true }
+  ).lean();
+  return ok(res, row, 201);
+}
+
+export async function unassignProgram(req: any, res: any) {
+  const programId = req.body?.programId || req.query?.programId;
+  const groupId = req.body?.groupId || req.query?.groupId;
+  if (!programId || !groupId) throw new AppError('programId and groupId are required', 400, 'VALIDATION_ERROR');
+  const result = await ProgramAssignmentModel.deleteOne({
+    tenantId: req.params.tenantId,
+    programId,
+    groupId
+  });
+  if (result.deletedCount === 0) throw new AppError('Assignment not found', 404, 'NOT_FOUND');
+  return res.status(204).send();
 }
 
 export async function enrollProgram(req: any, res: any) {
@@ -504,12 +594,31 @@ export async function listMembers(req: any, res: any) {
 }
 
 export async function updateMemberRole(req: any, res: any) {
+  if (!['OWNER', 'ADMIN', 'MODERATOR', 'MEMBER'].includes(req.body.role)) {
+    throw new AppError('Invalid role', 422, 'VALIDATION_ERROR');
+  }
+  if (!['PENDING', 'ACTIVE', 'SUSPENDED', 'BANNED'].includes(req.body.status || 'ACTIVE')) {
+    throw new AppError('Invalid status', 422, 'VALIDATION_ERROR');
+  }
+
   const row = await MembershipModel.findOneAndUpdate(
     { tenantId: req.params.tenantId, userId: req.params.userId },
     { role: req.body.role, status: req.body.status || 'ACTIVE' },
     { new: true }
   ).lean();
   if (!row) throw new AppError('Membership not found', 404, 'NOT_FOUND');
+
+  await writeAuditLog({
+    actorUserId: req.user.sub,
+    tenantId: req.params.tenantId,
+    action: 'TENANT_MEMBER_ROLE_STATUS_UPDATED',
+    metadata: {
+      userId: req.params.userId,
+      role: row.role,
+      status: row.status
+    }
+  });
+
   return ok(res, row);
 }
 
@@ -711,5 +820,50 @@ export async function updateTenantSettings(req: any, res: any) {
     },
     { new: true, upsert: true }
   ).lean();
+  return ok(res, row);
+}
+
+export async function getTenantHomepageSettings(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const row =
+    (await TenantHomepageSettingsModel.findOne({ tenantId: req.params.tenantId }).lean()) ||
+    (await TenantHomepageSettingsModel.create({
+      tenantId: req.params.tenantId,
+      theme: { primaryColor: '', secondaryColor: '', logoUrl: '' },
+      sections: defaultHomepageSections(),
+      publishedAt: new Date()
+    }));
+
+  return ok(res, {
+    ...row,
+    sections: row.sections || defaultHomepageSections()
+  });
+}
+
+export async function updateTenantHomepageSettings(req: any, res: any) {
+  const sections = req.body?.sections && typeof req.body.sections === 'object' ? req.body.sections : defaultHomepageSections();
+  const theme = req.body?.theme && typeof req.body.theme === 'object' ? req.body.theme : {};
+
+  const row = await TenantHomepageSettingsModel.findOneAndUpdate(
+    { tenantId: req.params.tenantId },
+    {
+      theme: {
+        primaryColor: String(theme.primaryColor || ''),
+        secondaryColor: String(theme.secondaryColor || ''),
+        logoUrl: String(theme.logoUrl || '')
+      },
+      sections,
+      publishedAt: new Date()
+    },
+    { new: true, upsert: true }
+  ).lean();
+
+  await writeAuditLog({
+    actorUserId: req.user.sub,
+    tenantId: req.params.tenantId,
+    action: 'TENANT_HOMEPAGE_SETTINGS_UPDATED',
+    metadata: {}
+  });
+
   return ok(res, row);
 }

@@ -6,8 +6,6 @@ import { UserModel } from '../models/User.js';
 import { LicenseModel } from '../models/License.js';
 import { MemberProfileModel } from '../models/MemberProfile.js';
 import {
-  AnnouncementModel,
-  EventModel,
   InvitationModel,
   RegistrationFieldModel,
   TenantSettingsModel
@@ -33,6 +31,14 @@ function mapMembership(membership: any) {
     createdAt: membership.createdAt,
     updatedAt: membership.updatedAt
   };
+}
+
+function getMembershipRoute(slug: string, membership: { role: string; status: string }) {
+  if (membership.status === 'PENDING') return `/c/${slug}/pending`;
+  if (membership.role === 'OWNER' || membership.role === 'ADMIN' || membership.role === 'MODERATOR') {
+    return `/c/${slug}/admin`;
+  }
+  return `/c/${slug}`;
 }
 
 export async function listPublicTenants(req: any, res: any) {
@@ -66,41 +72,6 @@ export async function getTenantPublic(req: any, res: any) {
   return ok(res, tenant);
 }
 
-export async function getTenantPublicPreview(req: any, res: any) {
-  const tenant = await TenantModel.findOne({ slug: String(req.params.slug).toLowerCase() }).lean();
-  if (!tenant) throw new AppError('Tenant not found', 404, 'NOT_FOUND');
-  const tenantId = tenant._id;
-  const [upcomingEvents, recentAnnouncements] = await Promise.all([
-    EventModel.find({ tenantId, startsAt: { $gte: new Date() } }).sort({ startsAt: 1 }).limit(5).lean(),
-    AnnouncementModel.find({ tenantId }).sort({ createdAt: -1 }).limit(3).lean()
-  ]);
-  return ok(res, {
-    tenant: {
-      id: String(tenant._id),
-      name: tenant.name,
-      slug: tenant.slug,
-      description: tenant.description,
-      logoUrl: tenant.logoUrl,
-      category: tenant.category,
-      location: tenant.location
-    },
-    upcomingEvents: upcomingEvents.map((e: any) => ({
-      _id: String(e._id),
-      title: e.title,
-      startsAt: e.startsAt,
-      location: e.location,
-      isOnline: e.isOnline,
-      meetingLink: e.meetingLink
-    })),
-    recentAnnouncements: recentAnnouncements.map((a: any) => ({
-      _id: String(a._id),
-      title: a.title,
-      content: (a.content || '').slice(0, 200),
-      isPinned: a.isPinned
-    }))
-  });
-}
-
 export async function getTenantById(req: any, res: any) {
   const tenantId = String(req.params.tenantId || '');
   if (!Types.ObjectId.isValid(tenantId)) throw new AppError('Invalid tenantId', 400, 'VALIDATION_ERROR');
@@ -116,6 +87,42 @@ export async function getTenantById(req: any, res: any) {
     }).lean();
     if (!member) throw new AppError('Forbidden', 403, 'FORBIDDEN');
   }
+
+  return ok(res, {
+    id: String(tenant._id),
+    name: tenant.name,
+    slug: tenant.slug,
+    description: tenant.description,
+    status: tenant.status,
+    category: tenant.category,
+    location: tenant.location,
+    logoUrl: tenant.logoUrl
+  });
+}
+
+export async function updateTenant(req: any, res: any) {
+  const tenantId = String(req.params.tenantId || '');
+  if (!Types.ObjectId.isValid(tenantId)) throw new AppError('Invalid tenantId', 400, 'VALIDATION_ERROR');
+
+  const tenant = await TenantModel.findById(tenantId);
+  if (!tenant) throw new AppError('Tenant not found', 404, 'NOT_FOUND');
+
+  const member = await MembershipModel.findOne({
+    tenantId,
+    userId: new Types.ObjectId(req.user.sub),
+    status: 'ACTIVE'
+  }).lean();
+  if (!member) throw new AppError('Forbidden', 403, 'FORBIDDEN');
+  if (member.role !== 'OWNER' && member.role !== 'ADMIN') {
+    throw new AppError('Only owners and admins can update the community profile', 403, 'FORBIDDEN');
+  }
+
+  if (req.body.name !== undefined) tenant.name = String(req.body.name).trim();
+  if (req.body.description !== undefined) tenant.description = String(req.body.description || '').trim();
+  if (req.body.logoUrl !== undefined) tenant.logoUrl = String(req.body.logoUrl || '').trim();
+  if (req.body.category !== undefined) tenant.category = String(req.body.category || '').trim();
+  if (req.body.location !== undefined) tenant.location = String(req.body.location || '').trim();
+  await tenant.save();
 
   return ok(res, {
     id: String(tenant._id),
@@ -367,7 +374,7 @@ export async function joinTenantBySlug(req: any, res: any) {
     membershipStatus = 'ACTIVE';
     joinMethod = 'INVITE';
   } else if (!settings?.publicSignup) {
-    throw new AppError('Public signup is disabled for this community', 403, 'FORBIDDEN');
+    throw new AppError('Public signup is disabled for this community. An invitation link is required to join.', 403, 'PUBLIC_JOIN_DISABLED');
   }
 
   // Require fullName and phone for member profile (allow empty only when joining via valid invite)
@@ -423,7 +430,7 @@ export async function joinTenantBySlug(req: any, res: any) {
     res,
     {
       membership: mapMembership(membership),
-      nextRoute: membership.status === 'ACTIVE' ? `/c/${tenant.slug}` : `/c/${tenant.slug}/pending`,
+      nextRoute: getMembershipRoute(tenant.slug, membership),
       pendingApproval: membership.status === 'PENDING'
     },
     201

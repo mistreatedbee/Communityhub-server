@@ -15,6 +15,7 @@ function authUserPayload(user: {
   phone?: string;
   avatarUrl?: string;
   globalRole: 'SUPER_ADMIN' | 'USER';
+  status?: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
 }) {
   return {
     id: String(user._id),
@@ -22,7 +23,8 @@ function authUserPayload(user: {
     fullName: user.fullName || '',
     phone: user.phone || '',
     avatarUrl: user.avatarUrl || '',
-    globalRole: user.globalRole
+    globalRole: user.globalRole,
+    status: user.status || 'ACTIVE'
   };
 }
 
@@ -67,6 +69,8 @@ export async function login(req: any, res: any) {
 
   const valid = await bcrypt.compare(req.body.password, user.passwordHash);
   if (!valid) throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
+  if (user.status === 'SUSPENDED') throw new AppError('Account suspended', 403, 'ACCOUNT_SUSPENDED');
+  if (user.status === 'BANNED') throw new AppError('Account banned', 403, 'ACCOUNT_BANNED');
 
   const token = signJwt({
     sub: String(user._id),
@@ -107,6 +111,8 @@ export async function login(req: any, res: any) {
 export async function me(req: any, res: any) {
   const user = await UserModel.findById(req.user.sub).lean();
   if (!user) throw new AppError('User not found', 404, 'NOT_FOUND');
+  if (user.status === 'SUSPENDED') throw new AppError('Account suspended', 403, 'ACCOUNT_SUSPENDED');
+  if (user.status === 'BANNED') throw new AppError('Account banned', 403, 'ACCOUNT_BANNED');
 
   const memberships = await MembershipModel.find({
     userId: user._id

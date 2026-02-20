@@ -9,8 +9,7 @@ const announcementSchema = new Schema(
     content: { type: String, required: true },
     isPinned: { type: Boolean, default: false },
     visibility: { type: String, enum: ['PUBLIC', 'MEMBERS', 'LEADERS'], default: 'MEMBERS' },
-    authorUserId: { type: Types.ObjectId, ref: 'User', required: true },
-    attachmentUrls: { type: [String], default: [] }
+    authorUserId: { type: Types.ObjectId, ref: 'User', required: true }
   },
   baseOpts
 );
@@ -23,8 +22,7 @@ const postSchema = new Schema(
     visibility: { type: String, enum: ['PUBLIC', 'MEMBERS', 'LEADERS'], default: 'MEMBERS' },
     isPublished: { type: Boolean, default: true },
     publishedAt: { type: Date, default: Date.now },
-    authorUserId: { type: Types.ObjectId, ref: 'User', required: true },
-    mediaUrls: { type: [String], default: [] }
+    authorUserId: { type: Types.ObjectId, ref: 'User', required: true }
   },
   baseOpts
 );
@@ -39,6 +37,8 @@ const resourceSchema = new Schema(
     type: { type: String, default: 'link' },
     folder: { type: String, default: '' },
     groupId: { type: Types.ObjectId, ref: 'Group', default: null },
+    moduleId: { type: Types.ObjectId, ref: 'ProgramModule', default: null },
+    programId: { type: Types.ObjectId, ref: 'Program', default: null },
     createdBy: { type: Types.ObjectId, ref: 'User', required: true }
   },
   baseOpts
@@ -98,6 +98,7 @@ const programSchema = new Schema(
     tenantId: { type: Types.ObjectId, ref: 'Tenant', required: true, index: true },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
+    status: { type: String, enum: ['DRAFT', 'ACTIVE'], default: 'ACTIVE' },
     createdBy: { type: Types.ObjectId, ref: 'User', required: true }
   },
   baseOpts
@@ -122,6 +123,7 @@ const programAssignmentSchema = new Schema(
   },
   baseOpts
 );
+programAssignmentSchema.index({ tenantId: 1, programId: 1, groupId: 1 }, { unique: true });
 
 const programEnrollmentSchema = new Schema(
   {
@@ -190,6 +192,20 @@ const tenantSettingsSchema = new Schema(
   baseOpts
 );
 
+const tenantHomepageSettingsSchema = new Schema(
+  {
+    tenantId: { type: Types.ObjectId, ref: 'Tenant', required: true, unique: true, index: true },
+    theme: {
+      primaryColor: { type: String, default: '' },
+      secondaryColor: { type: String, default: '' },
+      logoUrl: { type: String, default: '' }
+    },
+    sections: { type: Schema.Types.Mixed, default: {} },
+    publishedAt: { type: Date, default: null }
+  },
+  baseOpts
+);
+
 export const AnnouncementModel = model('Announcement', announcementSchema);
 export const TenantPostModel = model('TenantPost', postSchema);
 export const TenantResourceModel = model('TenantResource', resourceSchema);
@@ -205,3 +221,4 @@ export const InvitationModel = model('Invitation', invitationSchema);
 export const NotificationModel = model('Notification', notificationSchema);
 export const RegistrationFieldModel = model('RegistrationField', registrationFieldSchema);
 export const TenantSettingsModel = model('TenantSettings', tenantSettingsSchema);
+export const TenantHomepageSettingsModel = model('TenantHomepageSettings', tenantHomepageSettingsSchema);

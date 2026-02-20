@@ -5,6 +5,8 @@ import {
   listTenants,
   listUsers,
   overview,
+  promoteUserToTenant,
+  updateUserRoleStatus,
   updateTenantStatus
 } from '../controllers/admin.controller.js';
 import { auth } from '../middleware/auth.js';
@@ -19,6 +21,8 @@ router.use(auth, requireRole('SUPER_ADMIN'));
 
 router.get('/overview', asyncHandler(overview));
 router.get('/users', asyncHandler(listUsers));
+router.put('/users/:userId', asyncHandler(updateUserRoleStatus));
+router.post('/users/:userId/promote-tenant', asyncHandler(promoteUserToTenant));
 router.get('/tenants', asyncHandler(listTenants));
 router.post('/tenants', validate(createTenantSchema), asyncHandler(createTenant));
 router.put('/tenants/:id/status', asyncHandler(updateTenantStatus));
