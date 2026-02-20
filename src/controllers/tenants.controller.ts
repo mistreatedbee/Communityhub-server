@@ -423,7 +423,7 @@ export async function joinTenantBySlug(req: any, res: any) {
     res,
     {
       membership: mapMembership(membership),
-      nextRoute: membership.status === 'ACTIVE' ? `/c/${tenant.slug}/app` : `/c/${tenant.slug}/pending`,
+      nextRoute: membership.status === 'ACTIVE' ? `/c/${tenant.slug}` : `/c/${tenant.slug}/pending`,
       pendingApproval: membership.status === 'PENDING'
     },
     201
