@@ -86,7 +86,8 @@ export async function getTenantPublic(req: any, res: any) {
         : DEFAULT_ENABLED_SECTIONS,
     theme: {
       primaryColor: theme?.primaryColor ?? '',
-      secondaryColor: theme?.secondaryColor ?? ''
+      secondaryColor: theme?.secondaryColor ?? '',
+      logoUrl: theme?.logoUrl ?? ''
     }
   });
 }
@@ -96,37 +97,55 @@ export async function getTenantPublicPreview(req: any, res: any) {
   const tenant = await TenantModel.findOne({ slug, status: 'ACTIVE' }).lean();
   if (!tenant) throw new AppError('Tenant not found', 404, 'NOT_FOUND');
 
-  const [upcomingEvents, recentAnnouncements] = await Promise.all([
-    EventModel.find({ tenantId: tenant._id, startsAt: { $gte: new Date() } })
+  const now = new Date();
+  const [settings, homepageSettings, upcomingEvents, recentAnnouncements] = await Promise.all([
+    TenantSettingsModel.findOne({ tenantId: tenant._id }).lean(),
+    TenantHomepageSettingsModel.findOne({ tenantId: tenant._id }).lean(),
+    EventModel.find({ tenantId: tenant._id, startsAt: { $gte: now } })
       .sort({ startsAt: 1 })
-      .limit(5)
+      .limit(10)
       .lean(),
-    AnnouncementModel.find({ tenantId: tenant._id }).sort({ createdAt: -1 }).limit(5).lean()
+    AnnouncementModel.find({ tenantId: tenant._id, visibility: 'PUBLIC' })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean()
   ]);
+
+  const theme = homepageSettings?.theme;
+  const resolvedLogoUrl = theme?.logoUrl || (tenant as any).logoUrl || '';
 
   return ok(res, {
     tenant: {
       id: String(tenant._id),
       name: tenant.name,
       slug: tenant.slug,
-      description: tenant.description,
-      category: tenant.category,
-      location: tenant.location,
-      logoUrl: tenant.logoUrl
+      description: tenant.description ?? '',
+      category: tenant.category ?? '',
+      location: tenant.location ?? '',
+      logoUrl: resolvedLogoUrl
     },
+    theme: {
+      primaryColor: theme?.primaryColor ?? '',
+      secondaryColor: theme?.secondaryColor ?? '',
+      logoUrl: resolvedLogoUrl
+    },
+    enabledSections:
+      Array.isArray(settings?.enabledSections) && settings.enabledSections.length > 0
+        ? settings.enabledSections
+        : DEFAULT_ENABLED_SECTIONS,
     upcomingEvents: upcomingEvents.map((e: any) => ({
       _id: String(e._id),
       title: e.title,
       startsAt: e.startsAt,
-      location: e.location,
-      isOnline: e.isOnline,
-      meetingLink: e.meetingLink
+      location: e.location ?? undefined,
+      isOnline: e.isOnline ?? undefined,
+      meetingLink: e.meetingLink ?? undefined
     })),
     recentAnnouncements: recentAnnouncements.map((a: any) => ({
       _id: String(a._id),
       title: a.title,
-      content: a.content,
-      isPinned: a.isPinned
+      content: a.content ?? '',
+      isPinned: a.isPinned ?? false
     }))
   });
 }
@@ -246,7 +265,8 @@ export async function getTenantContext(req: any, res: any) {
     },
     theme: {
       primaryColor: theme?.primaryColor ?? '',
-      secondaryColor: theme?.secondaryColor ?? ''
+      secondaryColor: theme?.secondaryColor ?? '',
+      logoUrl: theme?.logoUrl ?? (tenant as any).logoUrl ?? ''
     },
     membership: membership ? mapMembership(membership) : null
   });

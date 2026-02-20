@@ -23,6 +23,7 @@ import tenantFeaturesRoutes from './tenantFeatures.routes.js';
 const router = Router();
 
 router.get('/public', asyncHandler(listPublicTenants));
+router.get('/:slug/public-preview', asyncHandler(getTenantPublicPreview));
 router.get('/id/:tenantId', auth, asyncHandler(getTenantById));
 router.put('/:tenantId', auth, requireTenantRole(['OWNER', 'ADMIN']), asyncHandler(updateTenant));
 router.get('/:slug/join-info', optionalAuth, asyncHandler(getTenantJoinInfo));
