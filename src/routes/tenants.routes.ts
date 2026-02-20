@@ -5,6 +5,7 @@ import {
   getTenantJoinInfo,
   getTenantMembers,
   getTenantPublic,
+  getTenantPublicPreview,
   inviteMember,
   joinTenantBySlug,
   joinTenant,
@@ -27,6 +28,7 @@ router.put('/:tenantId', auth, requireTenantRole(['OWNER', 'ADMIN']), asyncHandl
 router.get('/:slug/join-info', optionalAuth, asyncHandler(getTenantJoinInfo));
 router.post('/:slug/join', auth, asyncHandler(joinTenantBySlug));
 router.get('/:slug/context', optionalAuth, asyncHandler(getTenantContext));
+router.get('/:slug/public-preview', asyncHandler(getTenantPublicPreview));
 router.get('/:slug', asyncHandler(getTenantPublic));
 router.post('/:tenantId/join', auth, asyncHandler(joinTenant));
 router.get('/:tenantId/members', auth, requireTenantRole(['OWNER', 'ADMIN']), asyncHandler(getTenantMembers));
