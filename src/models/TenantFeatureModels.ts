@@ -182,12 +182,15 @@ const registrationFieldSchema = new Schema(
 );
 registrationFieldSchema.index({ tenantId: 1, key: 1 }, { unique: true });
 
+const DEFAULT_ENABLED_SECTIONS = ['announcements', 'resources', 'groups', 'events', 'programs'];
+
 const tenantSettingsSchema = new Schema(
   {
     tenantId: { type: Types.ObjectId, ref: 'Tenant', required: true, unique: true, index: true },
     publicSignup: { type: Boolean, default: true },
     approvalRequired: { type: Boolean, default: false },
-    registrationFieldsEnabled: { type: Boolean, default: true }
+    registrationFieldsEnabled: { type: Boolean, default: true },
+    enabledSections: { type: [String], default: () => [...DEFAULT_ENABLED_SECTIONS] }
   },
   baseOpts
 );

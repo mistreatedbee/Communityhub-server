@@ -47,7 +47,7 @@ async function ensureMembership(tenantId: string, userId: string) {
   if (!row) throw new AppError('Not a tenant member', 403, 'FORBIDDEN');
 }
 
-function defaultHomepageSections() {
+export function defaultHomepageSections() {
   return {
     sectionOrder: ['hero', 'vision', 'announcements', 'events', 'programs', 'groups', 'gallery'] as string[],
     hero: {
@@ -803,21 +803,34 @@ export async function updateRegistrationField(req: any, res: any) {
   return ok(res, row);
 }
 
+const DEFAULT_ENABLED_SECTIONS = ['announcements', 'resources', 'groups', 'events', 'programs'];
+
 export async function getTenantSettings(req: any, res: any) {
   const row =
     (await TenantSettingsModel.findOne({ tenantId: req.params.tenantId }).lean()) ||
     (await TenantSettingsModel.create({ tenantId: req.params.tenantId }));
-  return ok(res, row);
+  const settings = row as any;
+  return ok(res, {
+    ...settings,
+    enabledSections:
+      Array.isArray(settings?.enabledSections) && settings.enabledSections.length > 0
+        ? settings.enabledSections
+        : DEFAULT_ENABLED_SECTIONS
+  });
 }
 
 export async function updateTenantSettings(req: any, res: any) {
+  const update: Record<string, unknown> = {
+    publicSignup: req.body.publicSignup,
+    approvalRequired: req.body.approvalRequired,
+    registrationFieldsEnabled: req.body.registrationFieldsEnabled
+  };
+  if (Array.isArray(req.body.enabledSections)) {
+    update.enabledSections = req.body.enabledSections;
+  }
   const row = await TenantSettingsModel.findOneAndUpdate(
     { tenantId: req.params.tenantId },
-    {
-      publicSignup: req.body.publicSignup,
-      approvalRequired: req.body.approvalRequired,
-      registrationFieldsEnabled: req.body.registrationFieldsEnabled
-    },
+    update,
     { new: true, upsert: true }
   ).lean();
   return ok(res, row);

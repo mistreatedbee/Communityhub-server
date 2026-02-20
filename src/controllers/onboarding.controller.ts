@@ -3,9 +3,11 @@ import { LicenseModel } from '../models/License.js';
 import { MembershipModel } from '../models/Membership.js';
 import { PlanModel } from '../models/Plan.js';
 import { TenantModel } from '../models/Tenant.js';
+import { TenantSettingsModel, TenantHomepageSettingsModel } from '../models/TenantFeatureModels.js';
 import { AppError } from '../utils/errors.js';
 import { ok } from '../utils/response.js';
 import { writeAuditLog } from '../utils/audit.js';
+import { defaultHomepageSections } from './tenantFeatures.controller.js';
 
 function isExpired(expiresAt?: Date | null) {
   return !!expiresAt && expiresAt.getTime() < Date.now();
@@ -25,13 +27,19 @@ export async function claimLicense(req: any, res: any) {
   const plan = await PlanModel.findById(license.planId).lean();
   if (!plan) throw new AppError('Linked plan not found', 400, 'PLAN_NOT_FOUND');
 
+  const tenantPayload = req.body.tenant;
+  const enabledSections = Array.isArray(tenantPayload.enabledSections) && tenantPayload.enabledSections.length > 0
+    ? tenantPayload.enabledSections
+    : ['announcements', 'resources', 'groups', 'events', 'programs'];
+
   const createdTenant = await TenantModel.create({
-    name: req.body.tenant.name,
-    slug: req.body.tenant.slug.toLowerCase(),
-    description: req.body.tenant.description || '',
-    logoUrl: req.body.tenant.logoUrl || '',
-    category: req.body.tenant.category || '',
-    location: req.body.tenant.location || '',
+    name: tenantPayload.name,
+    slug: String(tenantPayload.slug).toLowerCase(),
+    description: tenantPayload.description || '',
+    logoUrl: tenantPayload.logoUrl || '',
+    logoFileId: tenantPayload.logoFileId || '',
+    category: tenantPayload.category || '',
+    location: tenantPayload.location || '',
     status: 'ACTIVE',
     createdBy: new Types.ObjectId(req.user.sub)
   });
@@ -41,6 +49,26 @@ export async function claimLicense(req: any, res: any) {
     userId: new Types.ObjectId(req.user.sub),
     role: 'OWNER',
     status: 'ACTIVE'
+  });
+
+  await TenantSettingsModel.create({
+    tenantId: createdTenant._id,
+    publicSignup: true,
+    approvalRequired: false,
+    registrationFieldsEnabled: true,
+    enabledSections
+  });
+
+  const themeLogoUrl = createdTenant.logoUrl || '';
+  await TenantHomepageSettingsModel.create({
+    tenantId: createdTenant._id,
+    theme: {
+      primaryColor: tenantPayload.primaryColor || '',
+      secondaryColor: tenantPayload.secondaryColor || '',
+      logoUrl: themeLogoUrl
+    },
+    sections: defaultHomepageSections(),
+    publishedAt: new Date()
   });
 
   await LicenseModel.updateOne(

@@ -8,7 +8,8 @@ import { MemberProfileModel } from '../models/MemberProfile.js';
 import {
   InvitationModel,
   RegistrationFieldModel,
-  TenantSettingsModel
+  TenantSettingsModel,
+  TenantHomepageSettingsModel
 } from '../models/TenantFeatureModels.js';
 import { AppError } from '../utils/errors.js';
 import { ok } from '../utils/response.js';
@@ -69,7 +70,23 @@ export async function listPublicTenants(req: any, res: any) {
 export async function getTenantPublic(req: any, res: any) {
   const tenant = await TenantModel.findOne({ slug: String(req.params.slug).toLowerCase() }).lean();
   if (!tenant) throw new AppError('Tenant not found', 404, 'NOT_FOUND');
-  return ok(res, tenant);
+  const [settings, homepageSettings] = await Promise.all([
+    TenantSettingsModel.findOne({ tenantId: tenant._id }).lean(),
+    TenantHomepageSettingsModel.findOne({ tenantId: tenant._id }).lean()
+  ]);
+  const theme = homepageSettings?.theme;
+  return ok(res, {
+    ...tenant,
+    id: String(tenant._id),
+    enabledSections:
+      Array.isArray(settings?.enabledSections) && settings.enabledSections.length > 0
+        ? settings.enabledSections
+        : DEFAULT_ENABLED_SECTIONS,
+    theme: {
+      primaryColor: theme?.primaryColor ?? '',
+      secondaryColor: theme?.secondaryColor ?? ''
+    }
+  });
 }
 
 export async function getTenantById(req: any, res: any) {
@@ -136,13 +153,16 @@ export async function updateTenant(req: any, res: any) {
   });
 }
 
+const DEFAULT_ENABLED_SECTIONS = ['announcements', 'resources', 'groups', 'events', 'programs'];
+
 export async function getTenantContext(req: any, res: any) {
   const tenant = await TenantModel.findOne({ slug: String(req.params.slug).toLowerCase() }).lean();
   if (!tenant) throw new AppError('Tenant not found', 404, 'NOT_FOUND');
 
-  const [license, settings, membership] = await Promise.all([
+  const [license, settings, homepageSettings, membership] = await Promise.all([
     LicenseModel.findOne({ claimedTenantId: tenant._id }).populate('planId').lean(),
     TenantSettingsModel.findOne({ tenantId: tenant._id }).lean(),
+    TenantHomepageSettingsModel.findOne({ tenantId: tenant._id }).lean(),
     req.user?.sub
       ? MembershipModel.findOne({
           tenantId: tenant._id,
@@ -151,14 +171,17 @@ export async function getTenantContext(req: any, res: any) {
       : Promise.resolve(null)
   ]);
 
+  const theme = homepageSettings?.theme;
   return ok(res, {
     tenant: {
       id: String(tenant._id),
       name: tenant.name,
       slug: tenant.slug,
-      logoUrl: tenant.logoUrl,
-      category: tenant.category,
-      location: tenant.location,
+      description: tenant.description ?? '',
+      logoUrl: tenant.logoUrl ?? '',
+      logoFileId: (tenant as any).logoFileId ?? '',
+      category: tenant.category ?? '',
+      location: tenant.location ?? '',
       status: tenant.status
     },
     license: license
@@ -174,7 +197,14 @@ export async function getTenantContext(req: any, res: any) {
     settings: {
       publicSignup: settings?.publicSignup ?? true,
       approvalRequired: settings?.approvalRequired ?? false,
-      registrationFieldsEnabled: settings?.registrationFieldsEnabled ?? true
+      registrationFieldsEnabled: settings?.registrationFieldsEnabled ?? true,
+      enabledSections: Array.isArray(settings?.enabledSections) && settings.enabledSections.length > 0
+        ? settings.enabledSections
+        : DEFAULT_ENABLED_SECTIONS
+    },
+    theme: {
+      primaryColor: theme?.primaryColor ?? '',
+      secondaryColor: theme?.secondaryColor ?? ''
     },
     membership: membership ? mapMembership(membership) : null
   });

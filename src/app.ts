@@ -10,6 +10,7 @@ import tenantsRoutes from './routes/tenants.routes.js';
 import profileRoutes from './routes/profile.routes.js';
 import auditRoutes from './routes/audit.routes.js';
 import onboardingRoutes from './routes/onboarding.routes.js';
+import uploadRoutes from './routes/upload.routes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { apiRateLimit, authRateLimit } from './middleware/rateLimit.js';
 
@@ -47,6 +48,7 @@ export function createApp() {
   app.use('/api/plans', plansRoutes);
   app.use('/api/licenses', licensesRoutes);
   app.use('/api/onboarding', onboardingRoutes);
+  app.use('/api/upload', uploadRoutes);
   app.use('/api/tenants', tenantsRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/audit', auditRoutes);

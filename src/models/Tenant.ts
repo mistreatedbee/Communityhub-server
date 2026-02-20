@@ -6,6 +6,7 @@ const tenantSchema = new Schema(
     slug: { type: String, required: true, unique: true, trim: true, lowercase: true, index: true },
     description: { type: String, default: '' },
     logoUrl: { type: String, default: '' },
+    logoFileId: { type: String, default: '' },
     category: { type: String, default: '' },
     location: { type: String, default: '' },
     status: { type: String, enum: ['ACTIVE', 'SUSPENDED'], default: 'ACTIVE' },
