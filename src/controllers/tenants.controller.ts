@@ -174,7 +174,8 @@ export async function getTenantById(req: any, res: any) {
     status: tenant.status,
     category: tenant.category,
     location: tenant.location,
-    logoUrl: tenant.logoUrl
+    logoUrl: tenant.logoUrl,
+    logoFileId: (tenant as any).logoFileId ?? ''
   });
 }
 
@@ -197,6 +198,10 @@ export async function updateTenant(req: any, res: any) {
 
   if (req.body.name !== undefined) tenant.name = String(req.body.name).trim();
   if (req.body.description !== undefined) tenant.description = String(req.body.description || '').trim();
+  if (req.body.logoFileId !== undefined) {
+    tenant.logoFileId = String(req.body.logoFileId || '').trim();
+    tenant.logoUrl = ''; // Device upload only; no external URL
+  }
   if (req.body.logoUrl !== undefined) tenant.logoUrl = String(req.body.logoUrl || '').trim();
   if (req.body.category !== undefined) tenant.category = String(req.body.category || '').trim();
   if (req.body.location !== undefined) tenant.location = String(req.body.location || '').trim();
