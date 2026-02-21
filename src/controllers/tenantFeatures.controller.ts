@@ -1030,29 +1030,42 @@ export async function getTenantHomepageSettings(req: any, res: any) {
 }
 
 export async function updateTenantHomepageSettings(req: any, res: any) {
-  const sections = req.body?.sections && typeof req.body.sections === 'object' ? req.body.sections : defaultHomepageSections();
-  const theme = req.body?.theme && typeof req.body.theme === 'object' ? req.body.theme : {};
+  try {
+    const tenantId = tenantObjectId(req.params.tenantId);
+    await ensureMembership(req.params.tenantId, req.user.sub);
 
-  const row = await TenantHomepageSettingsModel.findOneAndUpdate(
-    { tenantId: req.params.tenantId },
-    {
-      theme: {
-        primaryColor: String(theme.primaryColor || ''),
-        secondaryColor: String(theme.secondaryColor || ''),
-        logoUrl: String(theme.logoUrl || '')
+    const sections = req.body?.sections && typeof req.body.sections === 'object' ? req.body.sections : defaultHomepageSections();
+    const theme = req.body?.theme && typeof req.body.theme === 'object' ? req.body.theme : {};
+
+    const row = await TenantHomepageSettingsModel.findOneAndUpdate(
+      { tenantId },
+      {
+        theme: {
+          primaryColor: String(theme.primaryColor || ''),
+          secondaryColor: String(theme.secondaryColor || ''),
+          logoUrl: String(theme.logoUrl || '')
+        },
+        sections,
+        publishedAt: new Date()
       },
-      sections,
-      publishedAt: new Date()
-    },
-    { new: true, upsert: true }
-  ).lean();
+      { new: true, upsert: true }
+    ).lean();
 
-  await writeAuditLog({
-    actorUserId: req.user.sub,
-    tenantId: req.params.tenantId,
-    action: 'TENANT_HOMEPAGE_SETTINGS_UPDATED',
-    metadata: {}
-  });
+    await writeAuditLog({
+      actorUserId: req.user.sub,
+      tenantId: req.params.tenantId,
+      action: 'TENANT_HOMEPAGE_SETTINGS_UPDATED',
+      metadata: {}
+    });
 
-  return ok(res, row);
+    return ok(res, row);
+  } catch (err: any) {
+    if (err.name === 'AppError' || err.statusCode) {
+      throw err;
+    }
+    console.error('updateTenantHomepageSettings error:', err);
+    return res.status(500).json({
+      error: { message: err?.message || 'Failed to update home settings', code: 'INTERNAL_ERROR' }
+    });
+  }
 }
