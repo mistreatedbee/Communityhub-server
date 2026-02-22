@@ -1209,7 +1209,7 @@ export async function updateTenantHomepageSettings(req: any, res: any) {
 
     await writeAuditLog({
       actorUserId: req.user.sub,
-      tenantId: req.params.tenantId,
+      tenantId: String(tenantId),
       action: 'TENANT_HOMEPAGE_SETTINGS_UPDATED',
       metadata: {}
     });
