@@ -1172,6 +1172,20 @@ export async function getTenantHomepageSettings(req: any, res: any) {
 }
 
 export async function updateTenantHomepageSettings(req: any, res: any) {
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/cc90b081-2609-4b39-8823-a7eedb649dc4', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '157c0c' },
+    body: JSON.stringify({
+      sessionId: '157c0c',
+      location: 'tenantFeatures.controller.ts:updateTenantHomepageSettings',
+      message: 'PUT home-settings entry',
+      data: { tenantId: req.params.tenantId, hasSections: typeof req.body?.sections === 'object', hasTheme: typeof req.body?.theme === 'object' },
+      timestamp: Date.now(),
+      hypothesisId: 'H6'
+    })
+  }).catch(() => {});
+  // #endregion
   try {
     const tenantId = tenantObjectId(req.params.tenantId);
     await ensureMembership(req.params.tenantId, req.user.sub);
@@ -1202,6 +1216,20 @@ export async function updateTenantHomepageSettings(req: any, res: any) {
 
     return ok(res, row);
   } catch (err: any) {
+    // #region agent log
+    fetch('http://127.0.0.1:7630/ingest/cc90b081-2609-4b39-8823-a7eedb649dc4', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '157c0c' },
+      body: JSON.stringify({
+        sessionId: '157c0c',
+        location: 'tenantFeatures.controller.ts:updateTenantHomepageSettings:catch',
+        message: 'PUT home-settings 500',
+        data: { errMessage: err?.message, errName: err?.name, stack: typeof err?.stack === 'string' ? err.stack.slice(0, 500) : undefined },
+        timestamp: Date.now(),
+        hypothesisId: 'H6'
+      })
+    }).catch(() => {});
+    // #endregion
     if (err.name === 'AppError' || err.statusCode) {
       throw err;
     }
