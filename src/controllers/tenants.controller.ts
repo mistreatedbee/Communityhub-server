@@ -9,6 +9,7 @@ import {
   AnnouncementModel,
   EventModel,
   InvitationModel,
+  InviteLinkModel,
   RegistrationFieldModel,
   TenantSettingsModel,
   TenantHomepageSettingsModel
@@ -264,6 +265,7 @@ export async function getTenantContext(req: any, res: any) {
       publicSignup: settings?.publicSignup ?? true,
       approvalRequired: settings?.approvalRequired ?? false,
       registrationFieldsEnabled: settings?.registrationFieldsEnabled ?? true,
+      membersCanShareInviteLinks: settings?.membersCanShareInviteLinks ?? false,
       enabledSections: Array.isArray(settings?.enabledSections) && settings.enabledSections.length > 0
         ? settings.enabledSections
         : DEFAULT_ENABLED_SECTIONS
@@ -375,23 +377,35 @@ export async function joinTenant(req: any, res: any) {
   return ok(res, mapMembership(created), 201);
 }
 
+function isInviteLinkValid(link: { status: string; expiresAt: Date | null; maxUses: number | null; usedCount: number }) {
+  if (link.status !== 'ACTIVE') return false;
+  if (link.expiresAt && new Date(link.expiresAt).getTime() < Date.now()) return false;
+  if (link.maxUses != null && link.usedCount >= link.maxUses) return false;
+  return true;
+}
+
 export async function getTenantJoinInfo(req: any, res: any) {
   const slug = String(req.params.slug || '').toLowerCase();
   const inviteToken = String(req.query.invite || '').trim();
   const tenant = await TenantModel.findOne({ slug }).lean();
   if (!tenant) throw new AppError('Tenant not found', 404, 'NOT_FOUND');
 
-  const [settings, fields, invitation] = await Promise.all([
+  const [settings, fields, invitation, inviteLink] = await Promise.all([
     TenantSettingsModel.findOne({ tenantId: tenant._id }).lean(),
     RegistrationFieldModel.find({ tenantId: tenant._id, isActive: true }).sort({ fieldOrder: 1 }).lean(),
-    inviteToken ? InvitationModel.findOne({ tenantId: tenant._id, token: inviteToken }).lean() : Promise.resolve(null)
+    inviteToken ? InvitationModel.findOne({ tenantId: tenant._id, token: inviteToken }).lean() : Promise.resolve(null),
+    inviteToken ? InviteLinkModel.findOne({ tenantId: tenant._id, token: inviteToken }).lean() : Promise.resolve(null)
   ]);
 
   const invitationStatus = invitation
     ? normalizeInvitationStatus(invitation.status, invitation.expiresAt)
     : null;
 
-  const allowJoin = !!inviteToken || (settings?.publicSignup ?? true);
+  const hasValidInvitation = invitation && invitationStatus === 'SENT';
+  const hasValidInviteLink = inviteLink && isInviteLinkValid(inviteLink);
+  const allowJoin = inviteToken
+    ? hasValidInvitation || hasValidInviteLink
+    : (settings?.publicSignup ?? true);
 
   return ok(res, {
     tenant: {
@@ -424,7 +438,8 @@ export async function getTenantJoinInfo(req: any, res: any) {
           status: invitationStatus,
           valid: invitationStatus === 'SENT'
         }
-      : null
+      : null,
+    inviteLink: inviteLink && hasValidInviteLink ? { token: inviteLink.token, valid: true } : null
   });
 }
 
@@ -451,31 +466,43 @@ export async function joinTenantBySlug(req: any, res: any) {
   if (existingMembership?.status === 'BANNED') throw new AppError('You are banned from this community', 403, 'FORBIDDEN');
 
   let inviteRow: any = null;
+  let inviteLinkRow: any = null;
   let assignedRole: 'OWNER' | 'ADMIN' | 'MODERATOR' | 'MEMBER' = 'MEMBER';
   let membershipStatus: 'PENDING' | 'ACTIVE' = settings?.approvalRequired ? 'PENDING' : 'ACTIVE';
   let joinMethod: 'INVITE' | 'DIRECTORY' = 'DIRECTORY';
 
   if (inviteToken) {
     inviteRow = await InvitationModel.findOne({ tenantId: tenant._id, token: inviteToken });
-    if (!inviteRow) throw new AppError('Invitation not found', 404, 'NOT_FOUND');
-
-    const invitationStatus = normalizeInvitationStatus(inviteRow.status, inviteRow.expiresAt);
-    if (invitationStatus !== 'SENT') {
-      throw new AppError(`Invitation is ${invitationStatus.toLowerCase()}`, 400, 'INVITATION_INVALID');
+    if (inviteRow) {
+      const invitationStatus = normalizeInvitationStatus(inviteRow.status, inviteRow.expiresAt);
+      if (invitationStatus !== 'SENT') {
+        throw new AppError(`Invitation is ${invitationStatus.toLowerCase()}`, 400, 'INVITATION_INVALID');
+      }
+      if (inviteRow.email !== user.email.toLowerCase()) {
+        throw new AppError('Invitation email does not match your account', 403, 'FORBIDDEN');
+      }
+      assignedRole = inviteRow.role;
+      membershipStatus = 'ACTIVE';
+      joinMethod = 'INVITE';
+    } else {
+      inviteLinkRow = await InviteLinkModel.findOne({ tenantId: tenant._id, token: inviteToken });
+      if (inviteLinkRow) {
+        if (!isInviteLinkValid(inviteLinkRow)) {
+          throw new AppError('This invite link is no longer valid', 400, 'INVITE_LINK_INVALID');
+        }
+        assignedRole = 'MEMBER';
+        membershipStatus = settings?.approvalRequired ? 'PENDING' : 'ACTIVE';
+        joinMethod = 'INVITE';
+      } else {
+        throw new AppError('Invitation not found', 404, 'NOT_FOUND');
+      }
     }
-    if (inviteRow.email !== user.email.toLowerCase()) {
-      throw new AppError('Invitation email does not match your account', 403, 'FORBIDDEN');
-    }
-
-    assignedRole = inviteRow.role;
-    membershipStatus = 'ACTIVE';
-    joinMethod = 'INVITE';
   } else if (!settings?.publicSignup) {
     throw new AppError('Public signup is disabled for this community. An invitation link is required to join.', 403, 'PUBLIC_JOIN_DISABLED');
   }
 
-  // Require fullName and phone for member profile (allow empty only when joining via valid invite)
-  if (!inviteRow) {
+  // Require fullName and phone for member profile (allow empty only when joining via valid email invite)
+  if (!inviteRow && !inviteLinkRow) {
     if (!fullName.trim()) throw new AppError('Full name is required', 400, 'VALIDATION_ERROR');
     if (!phone.trim()) throw new AppError('Phone number is required', 400, 'VALIDATION_ERROR');
   }
@@ -516,11 +543,24 @@ export async function joinTenantBySlug(req: any, res: any) {
     await inviteRow.save();
   }
 
+  if (inviteLinkRow) {
+    inviteLinkRow.usedCount = (inviteLinkRow.usedCount || 0) + 1;
+    if (inviteLinkRow.maxUses != null && inviteLinkRow.usedCount >= inviteLinkRow.maxUses) {
+      inviteLinkRow.status = 'DISABLED';
+    }
+    await inviteLinkRow.save();
+  }
+
   await writeAuditLog({
     actorUserId: req.user.sub,
     tenantId: String(tenant._id),
     action: 'TENANT_JOIN',
-    metadata: { joinMethod, inviteUsed: !!inviteRow, approvalRequired: settings?.approvalRequired ?? false }
+    metadata: {
+      joinMethod,
+      inviteUsed: !!inviteRow,
+      inviteLinkUsed: !!inviteLinkRow,
+      approvalRequired: settings?.approvalRequired ?? false
+    }
   });
 
   return ok(

@@ -173,6 +173,20 @@ const invitationSchema = new Schema(
   baseOpts
 );
 
+const inviteLinkSchema = new Schema(
+  {
+    tenantId: { type: Types.ObjectId, ref: 'Tenant', required: true, index: true },
+    token: { type: String, required: true, unique: true },
+    createdBy: { type: Types.ObjectId, ref: 'User', required: true },
+    expiresAt: { type: Date, default: null },
+    maxUses: { type: Number, default: null },
+    usedCount: { type: Number, default: 0 },
+    status: { type: String, enum: ['ACTIVE', 'DISABLED'], default: 'ACTIVE' }
+  },
+  baseOpts
+);
+inviteLinkSchema.index({ tenantId: 1, token: 1 });
+
 const notificationSchema = new Schema(
   {
     tenantId: { type: Types.ObjectId, ref: 'Tenant', required: true, index: true },
@@ -209,6 +223,7 @@ const tenantSettingsSchema = new Schema(
     publicSignup: { type: Boolean, default: true },
     approvalRequired: { type: Boolean, default: false },
     registrationFieldsEnabled: { type: Boolean, default: true },
+    membersCanShareInviteLinks: { type: Boolean, default: false },
     enabledSections: { type: [String], default: () => [...DEFAULT_ENABLED_SECTIONS] }
   },
   baseOpts
@@ -240,6 +255,7 @@ export const ProgramModuleModel = model('ProgramModule', programModuleSchema);
 export const ProgramAssignmentModel = model('ProgramAssignment', programAssignmentSchema);
 export const ProgramEnrollmentModel = model('ProgramEnrollment', programEnrollmentSchema);
 export const InvitationModel = model('Invitation', invitationSchema);
+export const InviteLinkModel = model('InviteLink', inviteLinkSchema);
 export const NotificationModel = model('Notification', notificationSchema);
 export const RegistrationFieldModel = model('RegistrationField', registrationFieldSchema);
 export const TenantSettingsModel = model('TenantSettings', tenantSettingsSchema);

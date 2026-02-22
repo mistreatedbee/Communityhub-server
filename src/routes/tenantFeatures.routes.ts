@@ -35,6 +35,9 @@ import {
   listAnnouncements,
   listEvents,
   listInvitations,
+  listInviteLinks,
+  createInviteLink,
+  revokeInviteLink,
   listGroupPrograms,
   listMembers,
   removeGroupMember,
@@ -150,6 +153,10 @@ router.get('/invitations', requireTenantRole(['OWNER', 'ADMIN']), asyncHandler(l
 router.post('/invitations', requireTenantRole(['OWNER', 'ADMIN']), asyncHandler(createInvitation));
 router.put('/invitations/:id/resend', requireTenantRole(['OWNER', 'ADMIN']), asyncHandler(resendInvitation));
 router.put('/invitations/:id/revoke', requireTenantRole(['OWNER', 'ADMIN']), asyncHandler(revokeInvitation));
+
+router.get('/invite-links', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(listInviteLinks));
+router.post('/invite-links', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(createInviteLink));
+router.put('/invite-links/:id/revoke', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(revokeInviteLink));
 
 router.get('/notifications', asyncHandler(listNotifications));
 router.put('/notifications/:id/read', asyncHandler(markNotificationRead));

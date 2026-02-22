@@ -7,6 +7,7 @@ import {
   GroupMembershipModel,
   GroupModel,
   InvitationModel,
+  InviteLinkModel,
   NotificationModel,
   ProgramAssignmentModel,
   ProgramEnrollmentModel,
@@ -19,6 +20,7 @@ import {
   TenantSettingsModel
 } from '../models/TenantFeatureModels.js';
 import { MembershipModel } from '../models/Membership.js';
+import { TenantModel } from '../models/Tenant.js';
 import { MemberProfileModel } from '../models/MemberProfile.js';
 import { ok } from '../utils/response.js';
 import { writeAuditLog } from '../utils/audit.js';
@@ -889,6 +891,77 @@ export async function revokeInvitation(req: any, res: any) {
   });
 }
 
+export async function listInviteLinks(req: any, res: any) {
+  const tenantId = req.params.tenantId;
+  const rows = await InviteLinkModel.find({ tenantId })
+    .sort({ createdAt: -1 })
+    .lean();
+  return ok(
+    res,
+    rows.map((row: any) => ({
+      _id: row._id,
+      token: row.token,
+      createdBy: row.createdBy,
+      expiresAt: row.expiresAt,
+      maxUses: row.maxUses,
+      usedCount: row.usedCount ?? 0,
+      status: row.status,
+      createdAt: row.createdAt
+    }))
+  );
+}
+
+export async function createInviteLink(req: any, res: any) {
+  const tenantId = req.params.tenantId;
+  const token = crypto.randomUUID();
+  const expiresInDays = req.body.expiresInDays != null ? Number(req.body.expiresInDays) : null;
+  const maxUses = req.body.maxUses != null ? Number(req.body.maxUses) : null;
+
+  const expiresAt =
+    expiresInDays != null && expiresInDays > 0
+      ? new Date(Date.now() + Math.min(expiresInDays, 365) * 24 * 60 * 60 * 1000)
+      : null;
+
+  const row = await InviteLinkModel.create({
+    tenantId,
+    token,
+    createdBy: tenantObjectId(req.user.sub),
+    expiresAt,
+    maxUses: maxUses != null && maxUses > 0 ? maxUses : null,
+    usedCount: 0,
+    status: 'ACTIVE'
+  });
+
+  const tenant = await TenantModel.findById(tenantId).select('slug').lean();
+  const slug = tenant?.slug ?? '';
+  const baseUrl = req.get('origin') || req.protocol + '://' + req.get('host') || '';
+  const joinUrl = slug ? `${baseUrl}/c/${slug}/join?invite=${token}` : '';
+
+  return ok(
+    res,
+    {
+      ...row.toObject(),
+      joinUrl
+    },
+    201
+  );
+}
+
+export async function revokeInviteLink(req: any, res: any) {
+  const existing = await InviteLinkModel.findOne({
+    _id: req.params.id,
+    tenantId: req.params.tenantId
+  });
+  if (!existing) throw new AppError('Invite link not found', 404, 'NOT_FOUND');
+
+  existing.status = 'DISABLED';
+  await existing.save();
+
+  return ok(res, {
+    ...existing.toObject()
+  });
+}
+
 export async function listNotifications(req: any, res: any) {
   const rows = await NotificationModel.find({
     tenantId: req.params.tenantId,
@@ -1021,6 +1094,9 @@ export async function updateTenantSettings(req: any, res: any) {
     approvalRequired: req.body.approvalRequired,
     registrationFieldsEnabled: req.body.registrationFieldsEnabled
   };
+  if (typeof req.body.membersCanShareInviteLinks === 'boolean') {
+    update.membersCanShareInviteLinks = req.body.membersCanShareInviteLinks;
+  }
   if (Array.isArray(req.body.enabledSections)) {
     update.enabledSections = req.body.enabledSections;
   }
