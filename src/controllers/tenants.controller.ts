@@ -377,10 +377,16 @@ export async function joinTenant(req: any, res: any) {
   return ok(res, mapMembership(created), 201);
 }
 
-function isInviteLinkValid(link: { status: string; expiresAt: Date | null; maxUses: number | null; usedCount: number }) {
+function isInviteLinkValid(link: {
+  status: string;
+  expiresAt?: Date | null;
+  maxUses?: number | null;
+  usedCount?: number;
+}) {
   if (link.status !== 'ACTIVE') return false;
-  if (link.expiresAt && new Date(link.expiresAt).getTime() < Date.now()) return false;
-  if (link.maxUses != null && link.usedCount >= link.maxUses) return false;
+  if (link.expiresAt != null && new Date(link.expiresAt).getTime() < Date.now()) return false;
+  const used = link.usedCount ?? 0;
+  if (link.maxUses != null && used >= link.maxUses) return false;
   return true;
 }
 
