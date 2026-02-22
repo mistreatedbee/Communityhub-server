@@ -212,6 +212,7 @@ export async function listPosts(req: any, res: any) {
 }
 
 export async function createPost(req: any, res: any) {
+  const mediaUrls = Array.isArray(req.body.mediaUrls) ? req.body.mediaUrls.filter((u: unknown) => typeof u === 'string') : [];
   const created = await TenantPostModel.create({
     tenantId: req.params.tenantId,
     title: req.body.title,
@@ -219,9 +220,28 @@ export async function createPost(req: any, res: any) {
     visibility: req.body.visibility || 'MEMBERS',
     isPublished: req.body.isPublished ?? true,
     publishedAt: req.body.publishedAt ? new Date(req.body.publishedAt) : new Date(),
-    authorUserId: tenantObjectId(req.user.sub)
+    authorUserId: tenantObjectId(req.user.sub),
+    mediaUrls
   });
   return ok(res, created, 201);
+}
+
+export async function updatePost(req: any, res: any) {
+  await ensureMembership(req.params.tenantId, req.user.sub);
+  const mediaUrls = Array.isArray(req.body.mediaUrls) ? req.body.mediaUrls.filter((u: unknown) => typeof u === 'string') : undefined;
+  const updated = await TenantPostModel.findOneAndUpdate(
+    { _id: req.params.id, tenantId: req.params.tenantId },
+    {
+      ...(req.body.title != null && { title: req.body.title }),
+      ...(req.body.content != null && { content: req.body.content }),
+      ...(req.body.visibility != null && { visibility: req.body.visibility }),
+      ...(req.body.isPublished != null && { isPublished: req.body.isPublished }),
+      ...(mediaUrls !== undefined && { mediaUrls })
+    },
+    { new: true, runValidators: true }
+  ).lean();
+  if (!updated) throw new AppError('Post not found', 404, 'NOT_FOUND');
+  return ok(res, updated);
 }
 
 export async function deletePost(req: any, res: any) {

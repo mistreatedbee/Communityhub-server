@@ -9,6 +9,7 @@ const TENANT_FILES_BUCKET = 'tenant-files';
 const MAX_RESOURCE_SIZE = 20 * 1024 * 1024; // 20MB
 const MAX_THUMBNAIL_SIZE = 2 * 1024 * 1024; // 2MB
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_POST_MEDIA_SIZE = 5 * 1024 * 1024; // 5MB
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const RESOURCE_TYPES = [
@@ -156,6 +157,30 @@ export async function uploadAnnouncementAttachment(req: any, res: any) {
     uploadedBy: req.user?.sub ?? ''
   });
   return ok(res, { fileId, fileName: file.originalname || 'file', mimeType: file.mimetype, size: file.size }, 201);
+}
+
+export async function uploadPostMedia(req: any, res: any) {
+  const tenantId = req.params.tenantId as string;
+  const file = req.file as Express.Multer.File & { buffer: Buffer };
+  if (!file?.buffer) {
+    throw new AppError('No file uploaded', 400, 'VALIDATION_ERROR');
+  }
+  if (file.size > MAX_POST_MEDIA_SIZE) {
+    throw new AppError('Post media must be 5MB or smaller', 400, 'VALIDATION_ERROR');
+  }
+  if (!IMAGE_TYPES.includes(file.mimetype)) {
+    throw new AppError('Post media must be JPEG, PNG, GIF, or WebP', 400, 'VALIDATION_ERROR');
+  }
+
+  const bucket = getBucket();
+  const safeName = (file.originalname || 'media').replace(/[^a-zA-Z0-9.-]/g, '_');
+  const filename = `post-media-${Date.now()}-${safeName}`;
+  const fileId = await streamToGridFS(bucket, file.buffer, filename, file.mimetype, {
+    tenantId,
+    purpose: 'post-media',
+    uploadedBy: req.user?.sub ?? ''
+  });
+  return ok(res, { fileId, fileName: file.originalname || 'media', mimeType: file.mimetype, size: file.size }, 201);
 }
 
 export async function getTenantFile(req: any, res: any) {

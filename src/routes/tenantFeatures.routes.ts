@@ -18,6 +18,7 @@ import {
   deleteEvent,
   deleteModule,
   deletePost,
+  updatePost,
   deleteResource,
   enrollProgram,
   getModule,
@@ -85,6 +86,7 @@ router.delete(
 
 router.get('/posts', asyncHandler(listPosts));
 router.post('/posts', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(createPost));
+router.put('/posts/:id', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(updatePost));
 router.delete('/posts/:id', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(deletePost));
 
 router.get('/resources', asyncHandler(listResources));

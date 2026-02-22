@@ -6,7 +6,8 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import {
   uploadResource,
   uploadEventThumbnail,
-  uploadAnnouncementAttachment
+  uploadAnnouncementAttachment,
+  uploadPostMedia
 } from '../controllers/tenantUpload.controller.js';
 
 const router = Router({ mergeParams: true });
@@ -51,6 +52,15 @@ const thumbnailUpload = multer({
   }
 });
 
+const postMediaUpload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (IMAGE_TYPES.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Post media must be JPEG, PNG, GIF, or WebP.'));
+  }
+});
+
 const attachmentUpload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -72,6 +82,7 @@ router.post(
   asyncHandler(uploadResource)
 );
 router.post('/event-thumbnail', thumbnailUpload.single('file'), asyncHandler(uploadEventThumbnail));
+router.post('/post-media', postMediaUpload.single('file'), asyncHandler(uploadPostMedia));
 router.post('/announcement-attachment', attachmentUpload.single('file'), asyncHandler(uploadAnnouncementAttachment));
 
 export default router;

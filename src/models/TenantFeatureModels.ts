@@ -33,7 +33,8 @@ const postSchema = new Schema(
     visibility: { type: String, enum: ['PUBLIC', 'MEMBERS', 'LEADERS'], default: 'MEMBERS' },
     isPublished: { type: Boolean, default: true },
     publishedAt: { type: Date, default: Date.now },
-    authorUserId: { type: Types.ObjectId, ref: 'User', required: true }
+    authorUserId: { type: Types.ObjectId, ref: 'User', required: true },
+    mediaUrls: { type: [String], default: [] }
   },
   baseOpts
 );
