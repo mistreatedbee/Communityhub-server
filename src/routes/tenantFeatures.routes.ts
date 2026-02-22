@@ -70,6 +70,24 @@ import {
 
 const router = Router({ mergeParams: true });
 
+// #region agent log
+router.use((req, _res, next) => {
+  fetch('http://127.0.0.1:7630/ingest/cc90b081-2609-4b39-8823-a7eedb649dc4', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '157c0c' },
+    body: JSON.stringify({
+      sessionId: '157c0c',
+      location: 'tenantFeatures.routes.ts:router.use',
+      message: 'features router hit',
+      data: { method: req.method, path: req.path, url: req.originalUrl, tenantId: req.params.tenantId },
+      timestamp: Date.now(),
+      hypothesisId: 'H1'
+    })
+  }).catch(() => {});
+  next();
+});
+// #endregion
+
 router.use(auth);
 
 router.get('/dashboard', requireTenantRole(['OWNER', 'ADMIN', 'MODERATOR']), asyncHandler(tenantDashboard));

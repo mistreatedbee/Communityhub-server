@@ -892,6 +892,20 @@ export async function revokeInvitation(req: any, res: any) {
 }
 
 export async function listInviteLinks(req: any, res: any) {
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/cc90b081-2609-4b39-8823-a7eedb649dc4', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '157c0c' },
+    body: JSON.stringify({
+      sessionId: '157c0c',
+      location: 'tenantFeatures.controller.ts:listInviteLinks',
+      message: 'listInviteLinks entry',
+      data: { tenantId: req.params.tenantId },
+      timestamp: Date.now(),
+      hypothesisId: 'H3'
+    })
+  }).catch(() => {});
+  // #endregion
   const tenantId = req.params.tenantId;
   const rows = await InviteLinkModel.find({ tenantId })
     .sort({ createdAt: -1 })
@@ -1109,20 +1123,52 @@ export async function updateTenantSettings(req: any, res: any) {
 }
 
 export async function getTenantHomepageSettings(req: any, res: any) {
-  await ensureMembership(req.params.tenantId, req.user.sub);
-  const row =
-    (await TenantHomepageSettingsModel.findOne({ tenantId: req.params.tenantId }).lean()) ||
-    (await TenantHomepageSettingsModel.create({
-      tenantId: req.params.tenantId,
-      theme: { primaryColor: '', secondaryColor: '', logoUrl: '' },
-      sections: defaultHomepageSections(),
-      publishedAt: new Date()
-    }));
+  // #region agent log
+  fetch('http://127.0.0.1:7630/ingest/cc90b081-2609-4b39-8823-a7eedb649dc4', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '157c0c' },
+    body: JSON.stringify({
+      sessionId: '157c0c',
+      location: 'tenantFeatures.controller.ts:getTenantHomepageSettings',
+      message: 'getTenantHomepageSettings entry',
+      data: { tenantId: req.params.tenantId, hasUser: !!req.user?.sub },
+      timestamp: Date.now(),
+      hypothesisId: 'H4'
+    })
+  }).catch(() => {});
+  // #endregion
+  try {
+    await ensureMembership(req.params.tenantId, req.user.sub);
+    const row =
+      (await TenantHomepageSettingsModel.findOne({ tenantId: req.params.tenantId }).lean()) ||
+      (await TenantHomepageSettingsModel.create({
+        tenantId: req.params.tenantId,
+        theme: { primaryColor: '', secondaryColor: '', logoUrl: '' },
+        sections: defaultHomepageSections(),
+        publishedAt: new Date()
+      }));
 
-  return ok(res, {
-    ...row,
-    sections: row.sections || defaultHomepageSections()
-  });
+    return ok(res, {
+      ...row,
+      sections: row.sections || defaultHomepageSections()
+    });
+  } catch (err: any) {
+    // #region agent log
+    fetch('http://127.0.0.1:7630/ingest/cc90b081-2609-4b39-8823-a7eedb649dc4', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '157c0c' },
+      body: JSON.stringify({
+        sessionId: '157c0c',
+        location: 'tenantFeatures.controller.ts:getTenantHomepageSettings:catch',
+        message: 'getTenantHomepageSettings error',
+        data: { errMessage: err?.message, errName: err?.name, tenantId: req.params.tenantId },
+        timestamp: Date.now(),
+        hypothesisId: 'H4'
+      })
+    }).catch(() => {});
+    // #endregion
+    throw err;
+  }
 }
 
 export async function updateTenantHomepageSettings(req: any, res: any) {
